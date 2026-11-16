@@ -49,6 +49,14 @@ page = st.sidebar.radio(
 def find_tool(name):
     return shutil.which(name)
 
+
+def save_dashboard_youtube_url():
+    st.session_state["saved_youtube_url"] = st.session_state.get("youtube_url_dashboard", "").strip()
+
+
+def save_upload_youtube_url():
+    st.session_state["saved_youtube_url"] = st.session_state.get("youtube_url_upload", "").strip()
+
 def probe_duration(path):
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -324,7 +332,13 @@ if page == "Dashboard":
         st.title("Ajay AI Creator")
     st.subheader("Your Personal AI Shorts Studio")
     st.markdown("### 🔗 YouTube লিংক এখানে পেস্ট করুন")
-    st.text_input("YouTube ভিডিওর লিংক", placeholder="https://www.youtube.com/watch?v=...", key="youtube_url_input")
+    st.text_input(
+        "YouTube ভিডিওর লিংক",
+        value=st.session_state.get("saved_youtube_url", ""),
+        placeholder="https://www.youtube.com/watch?v=...",
+        key="youtube_url_dashboard",
+        on_change=save_dashboard_youtube_url
+    )
     st.info("লিংক দেওয়ার পর বাম পাশের Upload Video পেজে যান এবং “YouTube লিংক থেকে Shorts তৈরি করুন” চাপুন।")
     st.success("Welcome to your AI Shorts Studio!")
     col1, col2, col3 = st.columns(3)
@@ -341,7 +355,13 @@ elif page == "Upload Video":
     st.caption("শুধু নিজের ভিডিও বা ব্যবহারের অনুমতি থাকা ভিডিও ব্যবহার করুন।")
 
     st.subheader("🔗 YouTube লিংক থেকে Shorts")
-    youtube_url = st.text_input("YouTube ভিডিওর লিংক দিন", placeholder="https://www.youtube.com/watch?v=...", key="youtube_url_input")
+    youtube_url = st.text_input(
+        "YouTube ভিডিওর লিংক দিন",
+        value=st.session_state.get("saved_youtube_url", ""),
+        placeholder="https://www.youtube.com/watch?v=...",
+        key="youtube_url_upload",
+        on_change=save_upload_youtube_url
+    )
     yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 10, key="yt_count")
     yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
     st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
