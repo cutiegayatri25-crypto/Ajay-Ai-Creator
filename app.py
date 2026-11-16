@@ -389,7 +389,9 @@ elif page == "Upload Video":
                 pot_provider_process = ensure_bgutil_pot_provider()
                 # mweb uses the installed provider for video-server PO tokens.
                 download_profiles = [
-                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["mweb"]}}},
+                    # BgUtils recommends trying these clients together so yt-dlp
+                    # can request a PO token for a compatible client when needed.
+                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["mweb", "tv", "web_safari"]}}},
                     {"format": "best", "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
                     {"format": "best", "extractor_args": {"youtube": {"player_client": ["android"]}}},
                 ]
