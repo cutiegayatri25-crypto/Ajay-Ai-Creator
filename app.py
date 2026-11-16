@@ -578,9 +578,60 @@ elif page == "Shorts & Captions":
 
 elif page == "YouTube Channels":
     st.title("📺 YouTube Channels")
-    st.warning("চ্যানেল কানেকশন এখনো চালু নয়। নিরাপদ YouTube OAuth অনুমোদন ছাড়া কোনো ভিডিও আপলোড বা প্রকাশ হবে না।")
-    st.write("Google Cloud project, YouTube Data API এবং আপনার অনুমোদিত OAuth সংযোগ প্রয়োজন। পাসওয়ার্ড/OTP কখনো এখানে দেবেন না।")
-    st.info("একাধিক নিজস্ব চ্যানেল আলাদা করে যুক্ত করার ব্যবস্থা পরের OAuth ধাপে সম্পূর্ণ হবে।")
+    st.write("আপনার নিজের YouTube চ্যানেলের লিংক এখানে যোগ করে রাখতে পারবেন।")
+    st.caption("চ্যানেলের লিংক যোগ করা আর Google-এর নিরাপদ OAuth অনুমতি দিয়ে চ্যানেল কানেক্ট করা এক জিনিস নয়।")
+    st.subheader("➕ YouTube চ্যানেলের লিংক যোগ করুন")
+    channel_url = st.text_input(
+        "আপনার YouTube Channel URL",
+        placeholder="https://www.youtube.com/@YourChannel অথবা https://www.youtube.com/channel/UC...",
+        key="new_channel_url"
+    )
+    channel_label = st.text_input(
+        "চ্যানেলের নাম (ইচ্ছা হলে)",
+        placeholder="আমার YouTube Channel",
+        key="new_channel_label"
+    )
+    if st.button("চ্যানেলের লিংক যোগ করুন", type="primary", disabled=not channel_url.strip()):
+        clean_url = channel_url.strip()
+        valid_channel_url = (
+            clean_url.startswith("https://www.youtube.com/@") or
+            clean_url.startswith("https://youtube.com/@") or
+            clean_url.startswith("https://www.youtube.com/channel/") or
+            clean_url.startswith("https://youtube.com/channel/") or
+            clean_url.startswith("https://www.youtube.com/c/") or
+            clean_url.startswith("https://www.youtube.com/user/")
+        )
+        if not valid_channel_url:
+            st.error("সঠিক YouTube Channel URL দিন। চ্যানেলের Home পেজ থেকে লিংক কপি করুন।")
+        else:
+            channels = st.session_state.setdefault("ajay_saved_channels", [])
+            if any(item["url"] == clean_url for item in channels):
+                st.warning("এই চ্যানেলের লিংক আগে থেকেই যোগ করা আছে।")
+            elif len(channels) >= 5:
+                st.warning("এই ফ্রি স্টার্টার সংস্করণে সর্বোচ্চ ৫টি চ্যানেলের লিংক রাখা যাবে।")
+            else:
+                channels.append({
+                    "name": channel_label.strip() or clean_url.rstrip("/").split("/")[-1],
+                    "url": clean_url
+                })
+                st.success("চ্যানেলের লিংক যোগ হয়েছে।")
+    st.subheader("আপনার যোগ করা চ্যানেল")
+    channels = st.session_state.get("ajay_saved_channels", [])
+    if channels:
+        for idx, channel in enumerate(channels):
+            left, right = st.columns([5, 1])
+            with left:
+                st.markdown(f"**{channel['name']}**")
+                st.markdown(f"[চ্যানেল খুলুন]({channel['url']})")
+                st.caption("লিংক সংরক্ষিত — Google OAuth অনুমোদন এখনো করা হয়নি।")
+            with right:
+                if st.button("বাদ দিন", key=f"remove_channel_{idx}"):
+                    st.session_state["ajay_saved_channels"].pop(idx)
+                    st.rerun()
+    else:
+        st.info("এখনো কোনো চ্যানেলের লিংক যোগ করা হয়নি।")
+    st.warning("গুরুত্বপূর্ণ: এই মুহূর্তে শুধু চ্যানেলের লিংক এই সেশনে রাখা হচ্ছে। এটি Google অ্যাকাউন্টে সাইন-ইন বা আসল Channel OAuth connection নয়; তাই এখান থেকে এখনো ভিডিও আপলোড/শিডিউল করা যাবে না।")
+    st.write("আসল নিরাপদ কানেকশনের জন্য Google Cloud project, YouTube Data API এবং OAuth client credentials লাগবে। পাসওয়ার্ড বা OTP এখানে দেবেন না।")
 
 elif page == "Schedule":
     st.title("🗓️ Shorts Timer & Schedule")
