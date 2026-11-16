@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff27a"/><stop offset=".48" stop-color="#ffb800"/><stop offset="1" stop-color="#d87800"/></linearGradient><radialGradient id="b"><stop stop-color="#202b65"/><stop offset="1" stop-color="#080b20"/></radialGradient></defs>
+<circle cx="256" cy="256" r="245" fill="url(#b)" stroke="#18d9ee" stroke-width="10"/>
+<circle cx="256" cy="256" r="220" fill="none" stroke="#a34cff" stroke-width="5"/>
+<path d="M142 145 L180 70 L226 115 L256 42 L286 115 L332 70 L370 145 L338 174 L174 174 Z" fill="url(#g)" stroke="#fff1a6" stroke-width="8" stroke-linejoin="round"/>
+<path d="M110 394 L224 174 L290 174 L402 394 L326 394 L256 254 L184 394 Z" fill="url(#g)" stroke="#fff0a0" stroke-width="9" stroke-linejoin="round"/>
+<path d="M226 285 L226 350 L314 317 Z" fill="#ff243d" stroke="#fff" stroke-width="8" stroke-linejoin="round"/>
+<text x="256" y="452" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="38" fill="#fff">AJAY AI</text>
+</svg>
