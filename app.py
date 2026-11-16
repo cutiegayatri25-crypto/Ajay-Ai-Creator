@@ -129,7 +129,7 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
         ffmpeg_cmd += [
             "-i", str(logo_path),
             "-filter_complex",
-            "[0:v][2:v]overlay=W-w-24:24:format=auto[v]",
+            "[2:v]scale=160:-1[logo];[0:v][logo]overlay=W-w-24:24:format=auto[v]",
             "-map", "[v]", "-map", "1:a:0?"
         ]
     else:
