@@ -347,6 +347,7 @@ elif page == "Upload Video":
                 # different formats depending on the player client.
                 download_profiles = [
                     {"format": "best"},
+                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
                     {"format": "best", "extractor_args": {"youtube": {"player_client": ["android"]}}},
                 ]
                 for profile_index, profile in enumerate(download_profiles, 1):
@@ -362,8 +363,14 @@ elif page == "Upload Video":
                         last_error = "ডাউনলোডের পর ভিডিও ফাইল পাওয়া যায়নি।"
                     except Exception as download_error:
                         last_error = download_error
-                        if profile_index == 1:
-                            progress.progress(8, text="প্রথম পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প পদ্ধতি চেষ্টা হচ্ছে...")
+                        # Remove incomplete files before trying another YouTube client.
+                        for partial in Path(yt_dir).glob("source.*"):
+                            try:
+                                partial.unlink()
+                            except OSError:
+                                pass
+                        if profile_index < len(download_profiles):
+                            progress.progress(8, text="এই পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প YouTube পদ্ধতি চেষ্টা হচ্ছে...")
                 if not downloaded:
                     raise RuntimeError(
                         f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {last_error or 'ডাউনলোড সম্পূর্ণ হয়নি'}. "
