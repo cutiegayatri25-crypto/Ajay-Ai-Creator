@@ -185,7 +185,7 @@ def write_srt(rows, clip_start, clip_length, path):
         if right > left:
             lines += [str(n), f"{stamp(left-clip_start)} --> {stamp(right-clip_start)}", seg["text"], ""]
             n += 1
-    Path(path).write_text("\\n".join(lines), encoding="utf-8")
+    Path(path).write_text("\n".join(lines), encoding="utf-8")
 
 
 def burn_subtitles(video_path, srt_path):
@@ -269,8 +269,8 @@ def generate_metadata(rows, clip_start, clip_length, index=1):
     tags = list(dict.fromkeys(["Shorts", "YouTubeShorts", "AjayAICreator"] + keywords))
     hashtags = " ".join("#" + re.sub(r"[^A-Za-z0-9_অ-হা-য়]", "", t) for t in tags[:8])
     description = (
-        f"{text[:450]}{'…' if len(text) > 450 else ''}\\n\\n"
-        f"আরও এমন ভিডিও দেখতে ফলো করুন।\\n{hashtags}\\n"
+        f"{text[:450]}{'…' if len(text) > 450 else ''}\n\n"
+        f"আরও এমন ভিডিও দেখতে ফলো করুন।\n{hashtags}\n"
         "এই Short ভিডিওটির বক্তব্য থেকে স্বয়ংক্রিয়ভাবে তৈরি।"
     )
     return {"title": title[:100], "description": description, "tags": tags[:15], "transcript": text}
@@ -488,9 +488,9 @@ elif page == "Upload Video":
                 for idx, (file_path, file_name) in enumerate(zip(saved_files, saved_names), 1)
                 if os.path.exists(file_path)
             ]
-            # Six narrow cards per row with compact download controls.
+            # Four compact cards per row with compact download controls.
             for row_start in range(0, len(existing), 6):
-                card_columns = st.columns(6, gap="small")
+                card_columns = st.columns(4, gap="small")
                 for column, item in zip(card_columns, existing[row_start:row_start + 6]):
                     idx, file_path, file_name = item
                     with column:
