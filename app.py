@@ -204,8 +204,9 @@ def generate_metadata(rows, clip_start, clip_length, index=1):
         seg["text"] for seg in rows
         if seg["end"] > clip_start and seg["start"] < clip_start + clip_length
     ).strip()
+    transcript_text = text
     if not text:
-        text = "একটি নতুন ভিডিও ক্লিপ"
+        text = "এই Short-এর জন্য একটি প্রাথমিক খসড়া"
     words = re.findall(r"[A-Za-z0-9অ-হা-য়ঁড়ঢ়য়ীুূৃেৈোৌংঃ]+", text.lower())
     stop = {
         "এই","এটা","সেটা","আমি","আমরা","আপনি","তুমি","এবং","কিন্তু","যে","কি","কেন","তো",
@@ -229,9 +230,10 @@ def generate_metadata(rows, clip_start, clip_length, index=1):
     description = (
         f"{text[:450]}{'…' if len(text) > 450 else ''}\n\n"
         f"আরও এমন ভিডিও দেখতে ফলো করুন।\n{hashtags}\n"
-        "এই Short ভিডিওটির বক্তব্য থেকে স্বয়ংক্রিয়ভাবে তৈরি।"
+        ("ভিডিওর কথার ভিত্তিতে তৈরি প্রাথমিক খসড়া।" if transcript_text else
+         "ভিডিওর ট্রান্সক্রিপ্ট পাওয়া যায়নি; প্রকাশের আগে নিজে Title ও Description যাচাই করুন.")
     )
-    return {"title": title[:100], "description": description, "tags": tags[:15], "transcript": text}
+    return {"title": title[:100], "description": description, "tags": tags[:15], "transcript": transcript_text}
 
 
 def save_clip_metadata(rows, starts, clip_length):
@@ -385,7 +387,7 @@ elif page == "Upload Video":
                     st.markdown(f"**Short {i + 1}**")
                     yt_meta = st.session_state.get("ajay_yt_metadata", [])
                     if i < len(yt_meta):
-                        with st.expander("অটো Title / Description / Tags"):
+                        with st.expander("Title / Description / Tags"):
                             st.write("**Title**")
                             st.write(yt_meta[i]["title"])
                             st.write("**Description**")
@@ -467,7 +469,7 @@ elif page == "Upload Video":
                         st.markdown(f"**Short {idx}**")
                         upload_meta = st.session_state.get("ajay_metadata", [])
                         if idx <= len(upload_meta):
-                            with st.expander("অটো Title / Description / Tags"):
+                            with st.expander("Title / Description / Tags"):
                                 st.write("**Title**")
                                 st.write(upload_meta[idx - 1]["title"])
                                 st.write("**Description**")
