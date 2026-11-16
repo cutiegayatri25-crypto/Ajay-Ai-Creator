@@ -342,28 +342,33 @@ elif page == "Upload Video":
                 base_opts["progress_hooks"] = [yt_download_progress]
                 info = None
                 downloaded = None
-                try:
-                    # One download attempt only: repeated format fallbacks were causing long waits.
-                    opts = dict(
-                        base_opts,
-                        format="best[height<=720][ext=mp4]/best[height<=720]/best",
-                        merge_output_format="mp4"
-                    )
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        info = ydl.extract_info(youtube_url.strip(), download=True)
-                        prepared = Path(ydl.prepare_filename(info))
-                    candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
-                    downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
-                except Exception as download_error:
-                    raise RuntimeError(
-                        f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {download_error}. "
-                        "একবারই চেষ্টা করা হয়েছে যাতে দীর্ঘক্ষণ আটকে না থাকে।"
-                    ) from download_error
+                last_error = None
+                # Avoid strict height/extension filters: some YouTube videos expose
+                # different formats depending on the player client.
+                download_profiles = [
+                    {"format": "best"},
+                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["android"]}}},
+                ]
+                for profile_index, profile in enumerate(download_profiles, 1):
+                    try:
+                        opts = dict(base_opts, merge_output_format="mp4", **profile)
+                        with yt_dlp.YoutubeDL(opts) as ydl:
+                            info = ydl.extract_info(youtube_url.strip(), download=True)
+                            prepared = Path(ydl.prepare_filename(info))
+                        candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
+                        downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
+                        if downloaded:
+                            break
+                        last_error = "ডাউনলোডের পর ভিডিও ফাইল পাওয়া যায়নি।"
+                    except Exception as download_error:
+                        last_error = download_error
+                        if profile_index == 1:
+                            progress.progress(8, text="প্রথম পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প পদ্ধতি চেষ্টা হচ্ছে...")
                 if not downloaded:
                     raise RuntimeError(
-                        f"YouTube থেকে ভিডিও আনা যায়নি: {last_error or 'ডাউনলোড সম্পূর্ণ হয়নি'}. "
-                        "YouTube-এর অস্থায়ী বাধা/লগইন/কপিরাইট সীমাবদ্ধতা থাকতে পারে। "
-                        "নিজের ভিডিও হলে মূল MP4 ফাইল আপলোড করুন।"
+                        f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {last_error or 'ডাউনলোড সম্পূর্ণ হয়নি'}. "
+                        "YouTube-এর সাম্প্রতিক ফরম্যাট/PO Token সীমাবদ্ধতার কারণে এই ভিডিওটি সার্ভার থেকে নামানো নাও যেতে পারে। "
+                        "নিজের অনুমোদিত ভিডিও হলে MP4 ফাইল আপলোড করুন।"
                     )
                 if not downloaded.exists():
                     candidates = list(Path(yt_dir).glob("source.*"))
