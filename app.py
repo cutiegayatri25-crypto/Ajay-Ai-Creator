@@ -17,7 +17,14 @@ h1, h2, h3 { color: #f4c95d; }
 [data-testid="stSidebar"] { background: #151f36; }
 div.stButton > button {
     background: #e7b94f; color: #111827;
-    border-radius: 10px; font-weight: bold;
+    border-radius: 8px; font-weight: bold;
+    padding: 0.22rem 0.35rem; min-height: 1.9rem;
+    font-size: 0.72rem; line-height: 1.0;
+}
+div[data-testid="stDownloadButton"] > button {
+    padding: 0.20rem 0.28rem; min-height: 1.8rem;
+    font-size: 0.68rem; line-height: 1.0;
+    white-space: nowrap;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -263,17 +270,17 @@ elif page == "Upload Video":
                 for idx, (file_path, file_name) in enumerate(zip(saved_files, saved_names), 1)
                 if os.path.exists(file_path)
             ]
-            # Four compact cards per row; download button sits directly below each preview.
-            for row_start in range(0, len(existing), 4):
-                card_columns = st.columns(4, gap="small")
-                for column, item in zip(card_columns, existing[row_start:row_start + 4]):
+            # Six narrow cards per row with compact download controls.
+            for row_start in range(0, len(existing), 6):
+                card_columns = st.columns(6, gap="small")
+                for column, item in zip(card_columns, existing[row_start:row_start + 6]):
                     idx, file_path, file_name = item
                     with column:
                         st.markdown(f"**Short {idx}**")
                         st.video(file_path)
                         with open(file_path, "rb") as f:
                             st.download_button(
-                                "⬇️ Download MP4",
+                                "⬇ MP4",
                                 data=f.read(),
                                 file_name=file_name,
                                 mime="video/mp4",
@@ -283,7 +290,7 @@ elif page == "Upload Video":
                         if len(saved_subtitles) >= idx and os.path.exists(saved_subtitles[idx - 1]):
                             with open(saved_subtitles[idx - 1], "rb") as sf:
                                 st.download_button(
-                                    "💬 Download subtitles (.SRT)",
+                                    "💬 SRT",
                                     data=sf.read(),
                                     file_name=Path(saved_subtitles[idx - 1]).name,
                                     mime="application/x-subrip",
