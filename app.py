@@ -506,9 +506,9 @@ elif page == "Upload Video":
                 if os.path.exists(file_path)
             ]
             # Four compact cards per row with compact download controls.
-            for row_start in range(0, len(existing), 6):
+            for row_start in range(0, len(existing), 4):
                 card_columns = st.columns(4, gap="small")
-                for column, item in zip(card_columns, existing[row_start:row_start + 6]):
+                for column, item in zip(card_columns, existing[row_start:row_start + 4]):
                     idx, file_path, file_name = item
                     with column:
                         st.markdown(f"**Short {idx}**")
