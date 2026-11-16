@@ -68,9 +68,9 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
     logo_path = Path("logo.webp")
     filters = (
         "[0:v]split=2[bg][fg];"
-        "[bg]scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,boxblur=24:2,eq=brightness=-0.12[background];"
-        "[fg]scale=1080:1920:force_original_aspect_ratio=decrease[foreground];"
+        "[bg]scale=720:1280:force_original_aspect_ratio=increase,"
+        "crop=720:1280,boxblur=18:2,eq=brightness=-0.12[background];"
+        "[fg]scale=720:1280:force_original_aspect_ratio=decrease[foreground];"
         "[background][foreground]overlay=(W-w)/2:(H-h)/2[base]"
     )
     cmd = ["ffmpeg", "-y", "-ss", str(max(0, start)), "-i", str(source)]
@@ -297,7 +297,7 @@ elif page == "Upload Video":
         key="youtube_url_upload",
         on_change=save_upload_youtube_url
     )
-    yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 10, key="yt_count")
+    yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 3, key="yt_count")
     yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
     st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
     if st.button("▶ YouTube লিংক থেকে Shorts তৈরি করুন", type="primary", disabled=not youtube_url.strip()):
@@ -320,31 +320,45 @@ elif page == "Upload Video":
                     "noplaylist": True,
                     "quiet": True,
                     "no_warnings": True,
-                    "retries": 3,
-                    "fragment_retries": 3,
-                    "extractor_retries": 2,
-                    "socket_timeout": 25,
+                    "retries": 1,
+                    "fragment_retries": 1,
+                    "extractor_retries": 1,
+                    "socket_timeout": 12,
                     "file_access_retries": 2,
                     "restrictfilenames": True,
                     "cachedir": False,
                     "http_headers": {"User-Agent": "Mozilla/5.0"},
-                    "source_address": "0.0.0.0",
                 }
-                last_error = None
+                def yt_download_progress(status):
+                    if status.get("status") == "downloading":
+                        total_bytes = status.get("total_bytes") or status.get("total_bytes_estimate")
+                        if total_bytes:
+                            pct = min(14, 3 + int(11 * status.get("downloaded_bytes", 0) / total_bytes))
+                            progress.progress(pct, text=f"YouTube থেকে ভিডিও নামছে... {int(100 * status.get('downloaded_bytes', 0) / total_bytes)}%")
+                        else:
+                            progress.progress(5, text="YouTube থেকে ভিডিও নামছে...")
+                    elif status.get("status") == "finished":
+                        progress.progress(15, text="ভিডিও ডাউনলোড হয়েছে; এখন Shorts তৈরি হচ্ছে...")
+                base_opts["progress_hooks"] = [yt_download_progress]
                 info = None
                 downloaded = None
-                for fmt in ("best", "best[ext=mp4]/best", "bestvideo*+bestaudio/best"):
-                    try:
-                        opts = dict(base_opts, format=fmt, merge_output_format="mp4")
-                        with yt_dlp.YoutubeDL(opts) as ydl:
-                            info = ydl.extract_info(youtube_url.strip(), download=True)
-                            prepared = Path(ydl.prepare_filename(info))
-                        candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
-                        downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
-                        if downloaded:
-                            break
-                    except Exception as download_error:
-                        last_error = download_error
+                try:
+                    # One download attempt only: repeated format fallbacks were causing long waits.
+                    opts = dict(
+                        base_opts,
+                        format="best[height<=720][ext=mp4]/best[height<=720]/best",
+                        merge_output_format="mp4"
+                    )
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(youtube_url.strip(), download=True)
+                        prepared = Path(ydl.prepare_filename(info))
+                    candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
+                    downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
+                except Exception as download_error:
+                    raise RuntimeError(
+                        f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {download_error}. "
+                        "একবারই চেষ্টা করা হয়েছে যাতে দীর্ঘক্ষণ আটকে না থাকে।"
+                    ) from download_error
                 if not downloaded:
                     raise RuntimeError(
                         f"YouTube থেকে ভিডিও আনা যায়নি: {last_error or 'ডাউনলোড সম্পূর্ণ হয়নি'}. "
