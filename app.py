@@ -151,9 +151,14 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
         raise RuntimeError(detail)
     return True
 
-def transcribe_video(source):
+@st.cache_resource(show_spinner="Speech recognition model is loading for the first time...")
+def load_whisper_model():
     from faster_whisper import WhisperModel
-    model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    return WhisperModel("tiny", device="cpu", compute_type="int8")
+
+
+def transcribe_video(source):
+    model = load_whisper_model()
     segments, info = model.transcribe(str(source), vad_filter=True, beam_size=1)
     rows = []
     for seg in segments:
@@ -182,6 +187,28 @@ def write_srt(rows, clip_start, clip_length, path):
             n += 1
     Path(path).write_text("\\n".join(lines), encoding="utf-8")
 
+
+def burn_subtitles(video_path, srt_path):
+    """Burn readable captions into the exported MP4; keep the SRT as a separate download too."""
+    temp_out = str(video_path) + ".captioned.mp4"
+    # Escape the filename for FFmpeg's subtitles filter on Linux.
+    safe_srt = str(Path(srt_path).resolve()).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    cmd = [
+        "ffmpeg", "-y", "-i", str(video_path),
+        "-vf", f"subtitles='{safe_srt}':force_style='FontSize=20,Outline=2,Shadow=1,Alignment=2,MarginV=48'",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "copy", "-movflags", "+faststart", temp_out
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0 and Path(temp_out).exists() and Path(temp_out).stat().st_size > 0:
+        os.replace(temp_out, video_path)
+    else:
+        try:
+            if Path(temp_out).exists():
+                Path(temp_out).unlink()
+        except OSError:
+            pass
+        # MP4 and downloadable SRT remain available even if the server lacks libass.
 
 def choose_starts(rows, total, clip_len, count):
     if total <= clip_len:
@@ -265,6 +292,7 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
         make_vertical_clip(source, out, start, clip_len)
         srt = Path(output_dir) / f"Ajay_Short_{index:02d}.srt"
         write_srt(transcript, start, clip_len, srt)
+        burn_subtitles(out, srt)
         outputs.append(out)
         subtitles.append(srt)
         progress.progress(int(index / len(starts) * 100), text=f"Creating Short {index} of {len(starts)}...")
