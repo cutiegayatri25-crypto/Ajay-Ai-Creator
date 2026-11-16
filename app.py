@@ -212,6 +212,47 @@ def choose_starts(rows, total, clip_len, count):
     return sorted(chosen or [0.0])
 
 
+def generate_metadata(rows, clip_start, clip_length, index=1):
+    """Create a useful first-draft title, description and tags from the clip transcript."""
+    import re
+    text = " ".join(
+        seg["text"] for seg in rows
+        if seg["end"] > clip_start and seg["start"] < clip_start + clip_length
+    ).strip()
+    if not text:
+        text = "একটি নতুন ভিডিও ক্লিপ"
+    words = re.findall(r"[A-Za-z0-9অ-হা-য়ঁড়ঢ়য়ীুূৃেৈোৌংঃ]+", text.lower())
+    stop = {
+        "এই","এটা","সেটা","আমি","আমরা","আপনি","তুমি","এবং","কিন্তু","যে","কি","কেন","তো",
+        "হয়","হবে","করতে","করে","একটা","আর","না","হ্যাঁ","এর","তার","থেকে","জন্য",
+        "the","and","that","this","with","from","your","you","are","was","were","for",
+        "have","has","had","but","not","what","when","where","how","why","then","just",
+        "into","about","there","their","they","them","it's","its","can","will","would",
+        "is","am","be","to","of","in","on","a","an","it"
+    }
+    counts = {}
+    for w in words:
+        if len(w) > 2 and w not in stop and not w.isdigit():
+            counts[w] = counts.get(w, 0) + 1
+    keywords = [w for w, _ in sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:6]]
+    lead = " ".join(text.split()[:9]).strip(" ,.!?।")
+    if len(lead) > 64:
+        lead = lead[:61].rsplit(" ", 1)[0] + "…"
+    title = f"{lead} | গুরুত্বপূর্ণ মুহূর্ত #{index}" if lead else f"এই ভিডিওর গুরুত্বপূর্ণ মুহূর্ত #{index}"
+    tags = list(dict.fromkeys(["Shorts", "YouTubeShorts", "AjayAICreator"] + keywords))
+    hashtags = " ".join("#" + re.sub(r"[^A-Za-z0-9_অ-হা-য়]", "", t) for t in tags[:8])
+    description = (
+        f"{text[:450]}{'…' if len(text) > 450 else ''}\\n\\n"
+        f"আরও এমন ভিডিও দেখতে ফলো করুন।\\n{hashtags}\\n"
+        "এই Short ভিডিওটির বক্তব্য থেকে স্বয়ংক্রিয়ভাবে তৈরি।"
+    )
+    return {"title": title[:100], "description": description, "tags": tags[:15], "transcript": text}
+
+
+def save_clip_metadata(rows, starts, clip_length):
+    return [generate_metadata(rows, start, clip_length, i) for i, start in enumerate(starts, 1)]
+
+
 def create_clips(source, output_dir, duration, count, progress, transcript):
     total = probe_duration(source)
     if total < 3:
@@ -267,19 +308,49 @@ elif page == "Upload Video":
             progress = st.progress(3, text="YouTube ভিডিওর তথ্য যাচাই হচ্ছে...")
             try:
                 import yt_dlp
-                opts = {
-                    "format": "bestvideo*+bestaudio/best",
-                    "format_sort": ["res:1080", "ext:mp4:m4a"],
+                if not (youtube_url.strip().startswith("https://www.youtube.com/") or
+                        youtube_url.strip().startswith("https://youtu.be/") or
+                        youtube_url.strip().startswith("https://m.youtube.com/")):
+                    raise ValueError("সঠিক YouTube ভিডিও লিংক দিন (youtube.com বা youtu.be)।")
+
+                # Try a compatible combined format first, then fall back to best available.
+                # YouTube may still block automated downloads or require account verification.
+                base_opts = {
                     "outtmpl": str(Path(yt_dir) / "source.%(ext)s"),
-                    "merge_output_format": "mp4",
                     "noplaylist": True,
                     "quiet": True,
                     "no_warnings": True,
+                    "retries": 3,
+                    "fragment_retries": 3,
+                    "extractor_retries": 2,
+                    "socket_timeout": 25,
+                    "file_access_retries": 2,
                     "restrictfilenames": True,
+                    "cachedir": False,
+                    "http_headers": {"User-Agent": "Mozilla/5.0"},
+                    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
                 }
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(youtube_url.strip(), download=True)
-                    downloaded = Path(ydl.prepare_filename(info))
+                last_error = None
+                info = None
+                downloaded = None
+                for fmt in ("best[ext=mp4]/best", "bestvideo*+bestaudio/best"):
+                    try:
+                        opts = dict(base_opts, format=fmt, merge_output_format="mp4")
+                        with yt_dlp.YoutubeDL(opts) as ydl:
+                            info = ydl.extract_info(youtube_url.strip(), download=True)
+                            prepared = Path(ydl.prepare_filename(info))
+                        candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
+                        downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
+                        if downloaded:
+                            break
+                    except Exception as download_error:
+                        last_error = download_error
+                if not downloaded:
+                    raise RuntimeError(
+                        f"YouTube থেকে ভিডিও আনা যায়নি: {last_error or 'ডাউনলোড সম্পূর্ণ হয়নি'}. "
+                        "YouTube-এর অস্থায়ী বাধা/লগইন/কপিরাইট সীমাবদ্ধতা থাকতে পারে। "
+                        "নিজের ভিডিও হলে মূল MP4 ফাইল আপলোড করুন।"
+                    )
                 if not downloaded.exists():
                     candidates = list(Path(yt_dir).glob("source.*"))
                     if not candidates:
@@ -295,8 +366,11 @@ elif page == "Upload Video":
                 st.session_state["ajay_yt_short_files"] = [str(p) for p in outputs]
                 st.session_state["ajay_yt_short_names"] = [p.name for p in outputs]
                 st.session_state["ajay_yt_subtitle_files"] = [str(p) for p in subtitle_files]
+                clip_len = min(float(yt_duration), total)
+                yt_starts = choose_starts(transcript, total, clip_len, len(outputs))
+                st.session_state["ajay_yt_metadata"] = save_clip_metadata(transcript, yt_starts, clip_len)
                 st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}টি Shorts তৈরি হয়েছে। ভাষা: {language}")
-                st.info("প্রতিটি Short-এর জন্য আলাদা SRT সাবটাইটেল ফাইলও তৈরি হয়েছে।")
+                st.info("অটো ক্যাপশন (SRT) এবং ভিডিওর বক্তব্য থেকে Title, Description ও Tags তৈরি হয়েছে।")
             except Exception as exc:
                 st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
                 st.caption("কিছু ভিডিও YouTube-এর সীমাবদ্ধতা, অনুমতি বা সার্ভার নীতির কারণে ডাউনলোড করা যায় না। সে ক্ষেত্রে নিজের অনুমোদিত ভিডিও ফাইলটি Upload Video অংশে আপলোড করুন।")
@@ -311,6 +385,15 @@ elif page == "Upload Video":
             for col, i in zip(cols, range(row_start, min(row_start + 5, len(yt_files)))):
                 with col:
                     st.markdown(f"**Short {i + 1}**")
+                    yt_meta = st.session_state.get("ajay_yt_metadata", [])
+                    if i < len(yt_meta):
+                        with st.expander("অটো Title / Description / Tags"):
+                            st.write("**Title**")
+                            st.write(yt_meta[i]["title"])
+                            st.write("**Description**")
+                            st.write(yt_meta[i]["description"])
+                            st.write("**Tags**")
+                            st.write(", ".join(yt_meta[i]["tags"]))
                     if os.path.exists(yt_files[i]):
                         st.video(yt_files[i])
                         with open(yt_files[i], "rb") as vf:
@@ -357,8 +440,11 @@ elif page == "Upload Video":
                     st.session_state["ajay_short_files"] = [str(p) for p in outputs]
                     st.session_state["ajay_short_names"] = [p.name for p in outputs]
                     st.session_state["ajay_subtitle_files"] = [str(p) for p in subtitle_files]
+                    clip_len = min(float(clip_duration), total)
+                    upload_starts = choose_starts(transcript, total, clip_len, len(outputs))
+                    st.session_state["ajay_metadata"] = save_clip_metadata(transcript, upload_starts, clip_len)
                     st.success(f"Created {len(outputs)} suggested Shorts. Detected language: {language}.")
-                    st.info("প্রতিটি ক্লিপের সাবটাইটেল .SRT ফাইল তৈরি হয়েছে। এটি সম্ভাবনাময় অংশের পরামর্শ, ভাইরাল হওয়ার নিশ্চয়তা নয়।")
+                    st.info("অটো ক্যাপশন (SRT) এবং ভিডিওর বক্তব্য থেকে Title, Description ও Tags তৈরি হয়েছে।")
                 except Exception as exc:
                     st.error(f"Could not create Shorts: {exc}")
 
@@ -381,6 +467,15 @@ elif page == "Upload Video":
                     idx, file_path, file_name = item
                     with column:
                         st.markdown(f"**Short {idx}**")
+                        upload_meta = st.session_state.get("ajay_metadata", [])
+                        if idx <= len(upload_meta):
+                            with st.expander("অটো Title / Description / Tags"):
+                                st.write("**Title**")
+                                st.write(upload_meta[idx - 1]["title"])
+                                st.write("**Description**")
+                                st.write(upload_meta[idx - 1]["description"])
+                                st.write("**Tags**")
+                                st.write(", ".join(upload_meta[idx - 1]["tags"]))
                         st.video(file_path)
                         with open(file_path, "rb") as f:
                             st.download_button(
@@ -404,23 +499,43 @@ elif page == "Upload Video":
 
 elif page == "Shorts & Captions":
     st.title("✍️ Shorts & Captions")
-    st.info("Upload Video পেজে অটোমেটিক সাবটাইটেল তৈরি হবে। প্রতিটি Short-এর পাশে .SRT ডাউনলোড পাবেন।")
-    title = st.text_input("Shorts Title")
-    caption = st.text_area("Write your caption")
-    hashtags = st.text_input("Hashtags")
-    if st.button("Save Draft"):
-        st.session_state["ajay_draft"] = {"title": title, "caption": caption, "hashtags": hashtags}
-        st.success("Draft saved in this session.")
+    st.info("ভিডিও প্রসেস হলে প্রতিটি Short-এর জন্য বক্তব্য-ভিত্তিক Title, Description, Tags এবং আলাদা SRT সাবটাইটেল তৈরি হয়।")
+    generated = st.session_state.get("ajay_metadata", []) or st.session_state.get("ajay_yt_metadata", [])
+    if generated:
+        for n, item in enumerate(generated, 1):
+            with st.expander(f"Short {n} — তৈরি করা মেটাডেটা", expanded=(n == 1)):
+                st.write("**Title**")
+                st.code(item["title"])
+                st.write("**Description**")
+                st.text_area("Auto description", item["description"], key=f"meta_desc_{n}", height=110)
+                st.write("**Tags**")
+                st.write(", ".join(item["tags"]))
+                st.caption("এগুলো ভিডিওর ট্রান্সক্রিপ্ট থেকে স্বয়ংক্রিয় প্রাথমিক সাজেশন; ভাইরাল হওয়ার নিশ্চয়তা নয়।")
+    else:
+        st.warning("আগে Upload Video পেজে ভিডিও থেকে Shorts তৈরি করুন।")
 
 elif page == "YouTube Channels":
     st.title("📺 YouTube Channels")
-    st.warning("YouTube OAuth is not configured yet. No channel is connected and no video will be published.")
-    st.write("This requires Google Cloud setup, YouTube Data API access and your explicit channel authorization.")
+    st.warning("চ্যানেল কানেকশন এখনো চালু নয়। নিরাপদ YouTube OAuth অনুমোদন ছাড়া কোনো ভিডিও আপলোড বা প্রকাশ হবে না।")
+    st.write("Google Cloud project, YouTube Data API এবং আপনার অনুমোদিত OAuth সংযোগ প্রয়োজন। পাসওয়ার্ড/OTP কখনো এখানে দেবেন না।")
+    st.info("একাধিক নিজস্ব চ্যানেল আলাদা করে যুক্ত করার ব্যবস্থা পরের OAuth ধাপে সম্পূর্ণ হবে।")
 
 elif page == "Schedule":
-    st.title("🗓️ Publishing Schedule")
-    st.warning("Automatic YouTube scheduling is not active yet.")
-    st.write("After secure channel authorization, we can add upload-and-schedule publishing.")
+    st.title("🗓️ Shorts Timer & Schedule")
+    st.info("এখানে শিডিউলের পরিকল্পনা তৈরি করা যাবে। YouTube-এ সত্যিকারের auto-publish চালু করতে আগে চ্যানেল OAuth সংযোগ লাগবে।")
+    sched_date = st.date_input("প্রকাশের তারিখ")
+    sched_time = st.time_input("প্রকাশের সময়")
+    sched_channel = st.text_input("কোন নিজের চ্যানেলে প্রকাশ করবেন? (চ্যানেলের নাম)")
+    sched_files = st.session_state.get("ajay_short_names", []) + st.session_state.get("ajay_yt_short_names", [])
+    sched_video = st.selectbox("কোন Short শিডিউল করবেন?", sched_files) if sched_files else None
+    if st.button("শিডিউল পরিকল্পনা সংরক্ষণ করুন", disabled=not (sched_channel.strip() and sched_video)):
+        st.session_state.setdefault("ajay_schedule_drafts", []).append({
+            "date": str(sched_date), "time": str(sched_time),
+            "channel": sched_channel.strip(), "video": sched_video
+        })
+        st.success("শিডিউল পরিকল্পনা এই সেশনে সংরক্ষিত হয়েছে। এটি এখনো YouTube-এ আপলোড বা প্রকাশের সময় নির্ধারণ করেনি।")
+    for entry in st.session_state.get("ajay_schedule_drafts", []):
+        st.write(f"{entry['date']} {entry['time']} — {entry['channel']} — {entry['video']}")
 
 st.divider()
 st.caption("Ajay AI Creator | Free Starter Version")
