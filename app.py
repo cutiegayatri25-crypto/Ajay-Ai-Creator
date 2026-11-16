@@ -4,8 +4,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import cv2
-import numpy as np
 import streamlit as st
 
 st.set_page_config(page_title="Ajay AI Creator", page_icon="logo.webp", layout="wide")
@@ -66,96 +64,31 @@ def probe_duration(path):
     return float(result.stdout.strip())
 
 def make_vertical_clip(source, output, start, length, progress_callback=None):
-    cap = cv2.VideoCapture(str(source))
-    if not cap.isOpened():
-        raise RuntimeError("Could not open the uploaded video.")
-
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    if width <= 0 or height <= 0:
-        cap.release()
-        raise RuntimeError("Could not read video dimensions.")
-
-    # Stable 9:16 canvas. Keep the complete original frame visible and preserve
-    # its aspect ratio; use a soft blurred fill behind it instead of moving crops.
-    height_out = height - (height % 2)
-    width_out = max(2, int(height_out * 9 / 16))
-    width_out -= width_out % 2
-    start_frame = int(start * fps)
-    frame_count = max(1, int(length * fps))
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-
-    temp_video = str(output) + ".silent.mp4"
-    writer = cv2.VideoWriter(
-        temp_video, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width_out, height_out)
-    )
-    if not writer.isOpened():
-        cap.release()
-        raise RuntimeError("Could not initialize video encoder.")
-
-    for i in range(frame_count):
-        ok, frame = cap.read()
-        if not ok:
-            break
-
-        # Fill the portrait canvas with a blurred copy, without changing
-        # the size/shape of the clear original video in the foreground.
-        scale_bg = max(width_out / width, height_out / height)
-        bg_w = max(width_out, int(round(width * scale_bg)))
-        bg_h = max(height_out, int(round(height * scale_bg)))
-        background = cv2.resize(frame, (bg_w, bg_h), interpolation=cv2.INTER_AREA)
-        x_bg = max(0, (bg_w - width_out) // 2)
-        y_bg = max(0, (bg_h - height_out) // 2)
-        background = background[y_bg:y_bg + height_out, x_bg:x_bg + width_out]
-        background = cv2.GaussianBlur(background, (0, 0), sigmaX=24, sigmaY=24)
-        background = cv2.convertScaleAbs(background, alpha=0.55, beta=18)
-
-        # Fit the full source frame inside the 9:16 canvas; never stretch it.
-        scale_fg = min(width_out / width, height_out / height)
-        fg_w = max(2, int(round(width * scale_fg)))
-        fg_h = max(2, int(round(height * scale_fg)))
-        foreground = cv2.resize(frame, (fg_w, fg_h), interpolation=cv2.INTER_AREA)
-        x = (width_out - fg_w) // 2
-        y = (height_out - fg_h) // 2
-        background[y:y + fg_h, x:x + fg_w] = foreground
-        writer.write(background)
-
-        if progress_callback and i % max(1, frame_count // 20) == 0:
-            progress_callback(i / frame_count)
-
-    cap.release()
-    writer.release()
-    if not os.path.exists(temp_video) or os.path.getsize(temp_video) == 0:
-        raise RuntimeError("No frames were produced from this clip.")
-
-    # Add the app's own logo as a subtle watermark to every exported Short.
+    """Render a vertical clip in one FFmpeg pass for lower memory use and faster processing."""
     logo_path = Path("logo.webp")
-    ffmpeg_cmd = [
-        "ffmpeg", "-y", "-i", temp_video, "-ss", str(start), "-i", str(source)
-    ]
+    filters = (
+        "[0:v]split=2[bg][fg];"
+        "[bg]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,boxblur=24:2,eq=brightness=-0.12[background];"
+        "[fg]scale=1080:1920:force_original_aspect_ratio=decrease[foreground];"
+        "[background][foreground]overlay=(W-w)/2:(H-h)/2[base]"
+    )
+    cmd = ["ffmpeg", "-y", "-ss", str(max(0, start)), "-i", str(source)]
+    video_map = "[base]"
     if logo_path.exists():
-        ffmpeg_cmd += [
-            "-i", str(logo_path),
-            "-filter_complex",
-            "[2:v]scale=160:-1[logo];[0:v][logo]overlay=W-w-24:24:format=auto[v]",
-            "-map", "[v]", "-map", "1:a:0?"
-        ]
-    else:
-        ffmpeg_cmd += ["-map", "0:v:0", "-map", "1:a:0?"]
-    ffmpeg_cmd += [
-        "-t", str(length),
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-        "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart",
-        str(output)
+        filters += ";[1:v]scale=160:-1[logo];[base][logo]overlay=W-w-24:24:format=auto[v]"
+        cmd += ["-i", str(logo_path)]
+        video_map = "[v]"
+    cmd += [
+        "-t", str(length), "-filter_complex", filters,
+        "-map", video_map, "-map", "0:a:0?",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
+        "-c:a", "aac", "-b:a", "128k", "-threads", "2",
+        "-movflags", "+faststart", str(output)
     ]
-    mux = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-    try:
-        os.remove(temp_video)
-    except OSError:
-        pass
-    if mux.returncode != 0:
-        detail = mux.stderr[-1600:] if mux.stderr else "Audio/video export failed."
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not Path(output).exists() or Path(output).stat().st_size == 0:
+        detail = result.stderr[-1400:] if result.stderr else "FFmpeg could not export this clip."
         raise RuntimeError(detail)
     return True
 
@@ -435,7 +368,7 @@ elif page == "Upload Video":
                 yt_starts = choose_starts(transcript, total, clip_len, len(outputs))
                 st.session_state["ajay_yt_metadata"] = save_clip_metadata(transcript, yt_starts, clip_len)
                 st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}টি Shorts তৈরি হয়েছে। ভাষা: {language}")
-                st.info("ভিডিও প্রসেস সম্পন্ন। অটো ক্যাপশন সাময়িকভাবে বন্ধ; Shorts-এর সময় ভিডিও জুড়ে সমানভাবে বেছে নেওয়া হয়েছে।")
+                st.info("ভিডিও প্রসেস সম্পন্ন। এই Free Starter সংস্করণে অটো ট্রান্সক্রিপশন বন্ধ; তাই Shorts সমান ব্যবধানে তৈরি হয়েছে এবং Title/Description/Tags সাধারণ ড্রাফট হিসেবে দেখানো হবে।")
             except Exception as exc:
                 st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
                 st.caption("কিছু ভিডিও YouTube-এর সীমাবদ্ধতা, অনুমতি বা সার্ভার নীতির কারণে ডাউনলোড করা যায় না। সে ক্ষেত্রে নিজের অনুমোদিত ভিডিও ফাইলটি Upload Video অংশে আপলোড করুন।")
@@ -469,7 +402,7 @@ elif page == "Upload Video":
 
     st.divider()
     st.subheader("অথবা ভিডিও ফাইল আপলোড করুন")
-    st.caption("বড় ভিডিও আপলোডে সার্ভারের মেমোরি ও সাইজের সীমা থাকতে পারে।")
+    st.caption("বড় ভিডিও আপলোডে ইন্টারনেটের গতি, Streamlit Cloud-এর আপলোড সীমা ও সার্ভারের মেমোরির কারণে সময় লাগতে পারে। প্রথমে 30–100 MB-এর ছোট MP4 দিয়ে পরীক্ষা করুন।")
     st.title("📤 Upload Your Video")
     st.caption("Use videos you own or have permission to process.")
     video = st.file_uploader(
@@ -484,7 +417,7 @@ elif page == "Upload Video":
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=3)
         st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
-        st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। অটো ক্যাপশন সাময়িকভাবে বন্ধ; আপাতত ভিডিওর বিভিন্ন অংশ থেকে সমান ব্যবধানে ক্লিপ নেওয়া হবে।")
+        st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। দ্রুত FFmpeg প্রসেসিং ব্যবহার করা হচ্ছে। অটো ক্যাপশন এই Free Starter সংস্করণে বন্ধ; ক্লিপগুলো সমান ব্যবধানে নেওয়া হবে।")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
                 st.error("Video tools are not installed on the server yet.")
@@ -641,7 +574,7 @@ elif page == "Schedule":
             if st.button("পরিকল্পনা মুছুন", key=f"delete_schedule_{i}"):
                 schedule_items.pop(i)
                 st.rerun()
-    st.warning("এটি এখনো শুধু পরিকল্পনা। YouTube-এ Private upload করে নির্দিষ্ট সময়ে প্রকাশের জন্য Google OAuth, YouTube Data API এবং অনুমোদিত deployment secrets কনফিগার করতে হবে।")
+    st.warning("সহজ ভাষায়: এই তালিকাটি শুধু আপনার প্রকাশের তারিখ-সময় মনে রাখে। এটি YouTube-এ ভিডিও পাঠায় না বা নিজে থেকে প্রকাশ করে না। আসল Auto Schedule চালাতে Google-এর অনুমোদিত Connect account ব্যবস্থা, API credentials এবং সার্ভারে নিরাপদ secrets যোগ করতে হবে।")
 
 
 st.divider()
