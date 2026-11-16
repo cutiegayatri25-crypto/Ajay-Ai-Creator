@@ -83,10 +83,25 @@ def ensure_bgutil_pot_provider():
         cwd=str(server_dir), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     import time
-    time.sleep(2)
-    if process.poll() is not None:
-        raise RuntimeError("PO Token Provider server চালু হয়নি।")
-    return process
+    import urllib.request
+    # Wait for the local provider's documented health endpoint instead of
+    # assuming that a fixed sleep means the HTTP server is ready.
+    health_error = None
+    for _ in range(20):
+        if process.poll() is not None:
+            raise RuntimeError("PO Token Provider process বন্ধ হয়ে গেছে।")
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:4416/ping", timeout=2) as response:
+                if response.status == 200:
+                    return process
+        except Exception as exc:
+            health_error = exc
+        time.sleep(0.5)
+    process.terminate()
+    raise RuntimeError(
+        "PO Token Provider-এর /ping health check ব্যর্থ হয়েছে: "
+        + str(health_error or "server response পাওয়া যায়নি")
+    )
 
 
 def save_dashboard_youtube_url():
