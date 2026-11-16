@@ -576,6 +576,5 @@ elif page == "Shorts & Captions":
     else:
         st.warning("আগে Upload Video পেজে ভিডিও থেকে Shorts তৈরি করুন।")
 
-NaN
 st.divider()
 st.caption("Ajay AI Creator | Free Starter Version")
