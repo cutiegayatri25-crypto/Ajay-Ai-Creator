@@ -31,8 +31,15 @@ div[data-testid="stDownloadButton"] > button {
 </style>
 """, unsafe_allow_html=True)
 
-if Path("logo.webp").exists():
-    st.sidebar.image("logo.webp", width=150)
+def show_logo(path, width):
+    try:
+        if Path(path).exists():
+            st.image(path, width=width)
+    except Exception:
+        # Keep the app running if an optional logo file is invalid.
+        pass
+
+show_logo("logo.webp", 150)
 st.sidebar.title("🎬 Ajay AI Creator")
 st.sidebar.caption("Your Personal AI Shorts Studio")
 page = st.sidebar.radio(
@@ -209,8 +216,7 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
     return outputs, subtitles, total
 
 if page == "Dashboard":
-    if Path("logo.webp").exists():
-        st.image("logo.webp", width=210)
+    show_logo("logo.webp", 210)
     st.title("🎬 Ajay AI Creator")
     st.subheader("Your Personal AI Shorts Studio")
     st.markdown("### 🔗 YouTube লিংক এখানে পেস্ট করুন")
