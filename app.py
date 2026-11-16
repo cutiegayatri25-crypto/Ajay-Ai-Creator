@@ -549,13 +549,10 @@ elif page == "Shorts & Captions":
     if generated:
         for n, item in enumerate(generated, 1):
             with st.expander(f"Short {n} — তৈরি করা মেটাডেটা", expanded=(n == 1)):
-                st.write("**Title**")
-                st.code(item["title"])
-                st.write("**Description**")
-                st.text_area("Auto description", item["description"], key=f"meta_desc_{n}", height=110)
-                st.write("**Tags**")
-                st.write(", ".join(item["tags"]))
-                st.caption("এগুলো প্রাথমিক ড্রাফট; বর্তমানে অটো ট্রান্সক্রিপ্ট/AI ক্যাপশন চালু নেই এবং ভাইরাল হওয়ার নিশ্চয়তা নয়।")
+                st.text_input("Title (সম্পাদনা করুন)", item["title"], key=f"meta_title_{n}")
+                st.text_area("Description (সম্পাদনা করুন)", item["description"], key=f"meta_desc_{n}", height=110)
+                st.text_area("Tags / Hashtags (কমা দিয়ে আলাদা করুন)", ", ".join(item["tags"]), key=f"meta_tags_{n}", height=90)
+                st.caption("এগুলো প্রাথমিক ড্রাফট। বর্তমানে অটো ট্রান্সক্রিপ্ট/AI ক্যাপশন চালু নেই; প্রকাশের আগে নিজের মতো সম্পাদনা করুন। ভাইরাল হওয়ার নিশ্চয়তা নেই।")
     else:
         st.warning("আগে Upload Video পেজে ভিডিও থেকে Shorts তৈরি করুন।")
 
