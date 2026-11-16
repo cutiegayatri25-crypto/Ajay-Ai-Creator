@@ -218,6 +218,80 @@ if page == "Dashboard":
     st.info("Stable framing, automatic speech-to-text subtitles and transcript-assisted highlight suggestions are included. Viral results are not guaranteed.")
 
 elif page == "Upload Video":
+    st.title("📤 Upload Video অথবা YouTube লিংক")
+    st.caption("শুধু নিজের ভিডিও বা ব্যবহারের অনুমতি থাকা ভিডিও ব্যবহার করুন।")
+
+    st.subheader("🔗 YouTube লিংক থেকে Shorts")
+    youtube_url = st.text_input("YouTube ভিডিওর লিংক দিন", placeholder="https://www.youtube.com/watch?v=...")
+    yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 10, key="yt_count")
+    yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
+    st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
+    if st.button("▶ YouTube লিংক থেকে Shorts তৈরি করুন", type="primary", disabled=not youtube_url.strip()):
+        if not find_tool("ffmpeg") or not find_tool("ffprobe"):
+            st.error("সার্ভারে FFmpeg ইনস্টল নেই।")
+        else:
+            yt_dir = tempfile.mkdtemp(prefix="ajay_youtube_")
+            progress = st.progress(3, text="YouTube ভিডিওর তথ্য যাচাই হচ্ছে...")
+            try:
+                import yt_dlp
+                opts = {
+                    "format": "best[ext=mp4]/best",
+                    "outtmpl": str(Path(yt_dir) / "source.%(ext)s"),
+                    "merge_output_format": "mp4",
+                    "noplaylist": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "restrictfilenames": True,
+                }
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(youtube_url.strip(), download=True)
+                    downloaded = Path(ydl.prepare_filename(info))
+                if not downloaded.exists():
+                    candidates = list(Path(yt_dir).glob("source.*"))
+                    if not candidates:
+                        raise RuntimeError("ভিডিও ফাইল ডাউনলোড সম্পূর্ণ হয়নি।")
+                    downloaded = candidates[0]
+                progress.progress(15, text="ভিডিও থেকে কথা শনাক্ত ও সাবটাইটেল তৈরি হচ্ছে...")
+                transcript, language = transcribe_video(downloaded)
+                out_dir = Path(yt_dir) / "shorts"
+                out_dir.mkdir()
+                outputs, subtitle_files, total = create_clips(
+                    downloaded, out_dir, yt_duration, yt_count, progress, transcript
+                )
+                st.session_state["ajay_yt_short_files"] = [str(p) for p in outputs]
+                st.session_state["ajay_yt_short_names"] = [p.name for p in outputs]
+                st.session_state["ajay_yt_subtitle_files"] = [str(p) for p in subtitle_files]
+                st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}টি Shorts তৈরি হয়েছে। ভাষা: {language}")
+                st.info("প্রতিটি Short-এর জন্য আলাদা SRT সাবটাইটেল ফাইলও তৈরি হয়েছে।")
+            except Exception as exc:
+                st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
+                st.caption("কিছু ভিডিও YouTube-এর সীমাবদ্ধতা, অনুমতি বা সার্ভার নীতির কারণে ডাউনলোড করা যায় না। সে ক্ষেত্রে নিজের অনুমোদিত ভিডিও ফাইলটি Upload Video অংশে আপলোড করুন।")
+
+    yt_files = st.session_state.get("ajay_yt_short_files", [])
+    yt_names = st.session_state.get("ajay_yt_short_names", [])
+    yt_srts = st.session_state.get("ajay_yt_subtitle_files", [])
+    if yt_files:
+        st.subheader("YouTube থেকে তৈরি Shorts")
+        for row_start in range(0, len(yt_files), 5):
+            cols = st.columns(5, gap="small")
+            for col, i in zip(cols, range(row_start, min(row_start + 5, len(yt_files)))):
+                with col:
+                    st.markdown(f"**Short {i + 1}**")
+                    if os.path.exists(yt_files[i]):
+                        st.video(yt_files[i])
+                        with open(yt_files[i], "rb") as vf:
+                            st.download_button("⬇ MP4", vf.read(), file_name=yt_names[i], mime="video/mp4", key=f"yt_mp4_{i}")
+                    if i < len(yt_srts) and os.path.exists(yt_srts[i]):
+                        with open(yt_srts[i], "rb") as sf:
+                            st.download_button("💬 SRT", sf.read(), file_name=Path(yt_srts[i]).name, mime="application/x-subrip", key=f"yt_srt_{i}")
+
+    st.divider()
+    st.subheader("অথবা ভিডিও ফাইল আপলোড করুন")
+    st.caption("বড় ভিডিও আপলোডে সার্ভারের মেমোরি ও সাইজের সীমা থাকতে পারে।")
+    video = st.file_uploader(
+        "Choose a video", type=["mp4", "mov", "mkv", "webm"],
+        help="Large uploads may still be limited by Streamlit Community Cloud memory and server limits."
+    )
     st.title("📤 Upload Your Video")
     st.caption("Use videos you own or have permission to process.")
     video = st.file_uploader(
