@@ -441,9 +441,18 @@ elif page == "Upload Video":
                         if profile_index < len(download_profiles):
                             progress.progress(8, text="এই পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প YouTube পদ্ধতি চেষ্টা হচ্ছে...")
                 if not downloaded:
+                    error_text = str(last_error or "ডাউনলোড সম্পূর্ণ হয়নি")
+                    if "Sign in to confirm" in error_text or "not a bot" in error_text.lower():
+                        raise RuntimeError(
+                            "YouTube এই ক্লাউড সার্ভারের সংযোগকে bot-check দিয়ে আটকে দিয়েছে। "
+                            "PO Token Provider থাকলেও YouTube সব সার্ভার/IP-কে অনুমতি দেয় না। "
+                            "এই ভিডিওটি নিজের বা ব্যবহারের অনুমতিপ্রাপ্ত হলে MP4 ফাইলটি ডাউনলোড করে নিচের Upload Video অংশে দিন। "
+                            "এটি আপনার ভিডিওর ত্রুটি নয়; YouTube-এর সার্ভার-সাইড সীমাবদ্ধতা। "
+                            "মূল Error: " + error_text
+                        )
                     raise RuntimeError(
-                        f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {last_error or 'ডাউনলোড সম্পূর্ণ হয়নি'}. "
-                        "YouTube-এর সাম্প্রতিক ফরম্যাট/PO Token সীমাবদ্ধতার কারণে এই ভিডিওটি সার্ভার থেকে নামানো নাও যেতে পারে। "
+                        f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {error_text}. "
+                        "YouTube-এর ফরম্যাট, PO Token বা নেটওয়ার্ক সীমাবদ্ধতার কারণে ভিডিওটি সার্ভার থেকে নামানো যায়নি। "
                         "নিজের অনুমোদিত ভিডিও হলে MP4 ফাইল আপলোড করুন।"
                     )
                 if not downloaded.exists():
