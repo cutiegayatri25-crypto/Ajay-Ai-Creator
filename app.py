@@ -356,12 +356,13 @@ elif page == "Upload Video":
                     "restrictfilenames": True,
                     "cachedir": False,
                     "http_headers": {"User-Agent": "Mozilla/5.0"},
-                    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+                    "js_runtimes": {"deno": {}},
+                    "source_address": "0.0.0.0",
                 }
                 last_error = None
                 info = None
                 downloaded = None
-                for fmt in ("best[ext=mp4]/best", "bestvideo*+bestaudio/best"):
+                for fmt in ("best", "best[ext=mp4]/best", "bestvideo*+bestaudio/best"):
                     try:
                         opts = dict(base_opts, format=fmt, merge_output_format="mp4")
                         with yt_dlp.YoutubeDL(opts) as ydl:
