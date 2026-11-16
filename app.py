@@ -205,17 +205,30 @@ elif page == "Upload Video":
         saved_names = st.session_state.get("ajay_short_names", [])
         if saved_files:
             st.divider()
-            st.subheader("Your Shorts — download separately")
-            for idx, (file_path, file_name) in enumerate(zip(saved_files, saved_names), 1):
-                if os.path.exists(file_path):
-                    st.markdown(f"**Short {idx}**")
-                    st.video(file_path)
-                    with open(file_path, "rb") as f:
-                        st.download_button(
-                            f"⬇️ Download Short {idx} (MP4)",
-                            data=f.read(), file_name=file_name,
-                            mime="video/mp4", key=f"download_short_{idx}"
-                        )
+            st.subheader("Your Shorts")
+            st.caption("ছোট প্রিভিউ দেখুন এবং প্রতিটি ভিডিও আলাদাভাবে MP4 হিসেবে ডাউনলোড করুন।")
+            existing = [
+                (idx, file_path, file_name)
+                for idx, (file_path, file_name) in enumerate(zip(saved_files, saved_names), 1)
+                if os.path.exists(file_path)
+            ]
+            # Four compact cards per row; download button sits directly below each preview.
+            for row_start in range(0, len(existing), 4):
+                card_columns = st.columns(4, gap="small")
+                for column, item in zip(card_columns, existing[row_start:row_start + 4]):
+                    idx, file_path, file_name = item
+                    with column:
+                        st.markdown(f"**Short {idx}**")
+                        st.video(file_path)
+                        with open(file_path, "rb") as f:
+                            st.download_button(
+                                "⬇️ Download MP4",
+                                data=f.read(),
+                                file_name=file_name,
+                                mime="video/mp4",
+                                key=f"download_short_{idx}",
+                                use_container_width=True
+                            )
 
 elif page == "Shorts & Captions":
     st.title("✍️ Shorts & Captions")
