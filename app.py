@@ -576,5 +576,73 @@ elif page == "Shorts & Captions":
     else:
         st.warning("আগে Upload Video পেজে ভিডিও থেকে Shorts তৈরি করুন।")
 
+
+elif page == "YouTube Channels":
+    st.title("📺 YouTube Channels")
+    st.caption("এখানে চ্যানেলের লিংক সংরক্ষণ করা যাবে। এটি Google OAuth সংযোগ নয়।")
+    channels = st.session_state.setdefault("ajay_channel_links", [])
+    with st.form("add_channel_form", clear_on_submit=True):
+        channel_name = st.text_input("চ্যানেলের নাম (ঐচ্ছিক)")
+        channel_url = st.text_input("YouTube Channel URL", placeholder="https://www.youtube.com/@yourchannel")
+        submitted = st.form_submit_button("চ্যানেলের লিংক যোগ করুন")
+    if submitted:
+        url = channel_url.strip()
+        if not (url.startswith("https://www.youtube.com/") or url.startswith("https://youtube.com/")):
+            st.error("সঠিক YouTube channel URL দিন (https://www.youtube.com/...)।")
+        elif any(c.get("url") == url for c in channels):
+            st.warning("এই চ্যানেলের লিংকটি আগে থেকেই যোগ করা আছে।")
+        elif len(channels) >= 5:
+            st.warning("সর্বোচ্চ ৫টি চ্যানেল লিংক রাখা যাবে।")
+        else:
+            channels.append({"name": channel_name.strip() or "YouTube Channel", "url": url})
+            st.success("চ্যানেলের লিংক এই সেশনে যোগ হয়েছে।")
+    if channels:
+        st.subheader("সংরক্ষিত চ্যানেল লিংক")
+        for i, channel in enumerate(channels):
+            left, right = st.columns([5, 1])
+            left.markdown(f"**{channel['name']}**  \n{channel['url']}")
+            if right.button("বাদ দিন", key=f"remove_channel_{i}"):
+                channels.pop(i)
+                st.rerun()
+    st.warning("Google OAuth credentials এবং অনুমোদিত YouTube API সংযোগ এখনো সেট করা নেই। তাই এই লিংকগুলো দিয়ে ভিডিও আপলোড বা প্রকাশ করা যাবে না।")
+
+elif page == "Schedule":
+    st.title("🗓️ Schedule")
+    st.caption("এখানে প্রকাশের পরিকল্পনা তৈরি ও দেখা যাবে। Google OAuth/API সংযোগ ছাড়া YouTube-এ স্বয়ংক্রিয় প্রকাশ হবে না।")
+    schedule_items = st.session_state.setdefault("ajay_schedule_items", [])
+    available_shorts = st.session_state.get("ajay_short_names", []) + st.session_state.get("ajay_yt_short_names", [])
+    if not available_shorts:
+        st.info("আগে Upload Video পেজে ভিডিও থেকে অন্তত একটি Short তৈরি করুন।")
+    else:
+        with st.form("schedule_form", clear_on_submit=True):
+            selected_short = st.selectbox("কোন Short-এর জন্য পরিকল্পনা করবেন?", available_shorts)
+            schedule_date = st.date_input("প্রকাশের তারিখ")
+            schedule_time = st.time_input("প্রকাশের সময়")
+            selected_channel = st.selectbox(
+                "চ্যানেল লিংক (ঐচ্ছিক)",
+                ["চ্যানেল নির্বাচন করা হয়নি"] + [
+                    c.get("name", c.get("url", "Channel"))
+                    for c in st.session_state.get("ajay_channel_links", [])
+                ]
+            )
+            schedule_submitted = st.form_submit_button("শিডিউল পরিকল্পনা সংরক্ষণ করুন")
+        if schedule_submitted:
+            schedule_items.append({
+                "short": selected_short,
+                "date": str(schedule_date),
+                "time": str(schedule_time),
+                "channel": selected_channel
+            })
+            st.success("শিডিউল পরিকল্পনাটি এই সেশনে সংরক্ষিত হয়েছে।")
+    if schedule_items:
+        st.subheader("আপনার শিডিউল পরিকল্পনা")
+        for i, item in enumerate(schedule_items):
+            st.write(f"{i+1}. {item['short']} — {item['date']} {item['time']} — {item['channel']}")
+            if st.button("পরিকল্পনা মুছুন", key=f"delete_schedule_{i}"):
+                schedule_items.pop(i)
+                st.rerun()
+    st.warning("এটি এখনো শুধু পরিকল্পনা। YouTube-এ Private upload করে নির্দিষ্ট সময়ে প্রকাশের জন্য Google OAuth, YouTube Data API এবং অনুমোদিত deployment secrets কনফিগার করতে হবে।")
+
+
 st.divider()
 st.caption("Ajay AI Creator | Free Starter Version")
