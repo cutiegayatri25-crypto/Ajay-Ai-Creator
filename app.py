@@ -39,16 +39,6 @@ def probe_duration(path):
     )
     return float(result.stdout.strip())
 
-def detect_face_center(frame, detector):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = detector.detectMultiScale(
-        gray, scaleFactor=1.15, minNeighbors=4, minSize=(35, 35)
-    )
-    if len(faces) == 0:
-        return None
-    x, y, w, h = max(faces, key=lambda box: box[2] * box[3])
-    return x + w // 2
-
 def make_vertical_clip(source, output, start, length, progress_callback=None):
     cap = cv2.VideoCapture(str(source))
     if not cap.isOpened():
@@ -61,17 +51,15 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
         cap.release()
         raise RuntimeError("Could not read video dimensions.")
 
-    crop_width = min(width, max(2, int(height * 9 / 16)))
-    crop_width -= crop_width % 2
+    # Stable 9:16 canvas. Keep the complete original frame visible and preserve
+    # its aspect ratio; use a soft blurred fill behind it instead of moving crops.
     height_out = height - (height % 2)
-    width_out = crop_width
+    width_out = max(2, int(height_out * 9 / 16))
+    width_out -= width_out % 2
     start_frame = int(start * fps)
     frame_count = max(1, int(length * fps))
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
-    detector = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
     temp_video = str(output) + ".silent.mp4"
     writer = cv2.VideoWriter(
         temp_video, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width_out, height_out)
@@ -80,24 +68,32 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
         cap.release()
         raise RuntimeError("Could not initialize video encoder.")
 
-    last_center = width // 2
-    detected_any = False
     for i in range(frame_count):
         ok, frame = cap.read()
         if not ok:
             break
-        # Face detection on every 5th frame keeps processing lighter.
-        if i % 5 == 0:
-            face_center = detect_face_center(frame, detector)
-            if face_center is not None:
-                last_center = int(0.65 * last_center + 0.35 * face_center)
-                detected_any = True
 
-        left = max(0, min(width - crop_width, last_center - crop_width // 2))
-        cropped = frame[0:height_out, left:left + crop_width]
-        if cropped.shape[1] != crop_width:
-            cropped = cv2.resize(cropped, (crop_width, height_out))
-        writer.write(cropped)
+        # Fill the portrait canvas with a blurred copy, without changing
+        # the size/shape of the clear original video in the foreground.
+        scale_bg = max(width_out / width, height_out / height)
+        bg_w = max(width_out, int(round(width * scale_bg)))
+        bg_h = max(height_out, int(round(height * scale_bg)))
+        background = cv2.resize(frame, (bg_w, bg_h), interpolation=cv2.INTER_AREA)
+        x_bg = max(0, (bg_w - width_out) // 2)
+        y_bg = max(0, (bg_h - height_out) // 2)
+        background = background[y_bg:y_bg + height_out, x_bg:x_bg + width_out]
+        background = cv2.GaussianBlur(background, (0, 0), sigmaX=24, sigmaY=24)
+        background = cv2.convertScaleAbs(background, alpha=0.55, beta=18)
+
+        # Fit the full source frame inside the 9:16 canvas; never stretch it.
+        scale_fg = min(width_out / width, height_out / height)
+        fg_w = max(2, int(round(width * scale_fg)))
+        fg_h = max(2, int(round(height * scale_fg)))
+        foreground = cv2.resize(frame, (fg_w, fg_h), interpolation=cv2.INTER_AREA)
+        x = (width_out - fg_w) // 2
+        y = (height_out - fg_h) // 2
+        background[y:y + fg_h, x:x + fg_w] = foreground
+        writer.write(background)
 
         if progress_callback and i % max(1, frame_count // 20) == 0:
             progress_callback(i / frame_count)
@@ -107,7 +103,6 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
     if not os.path.exists(temp_video) or os.path.getsize(temp_video) == 0:
         raise RuntimeError("No frames were produced from this clip.")
 
-    # Copy original audio into the newly framed vertical video.
     mux = subprocess.run([
         "ffmpeg", "-y", "-i", temp_video, "-ss", str(start), "-i", str(source),
         "-t", str(length), "-map", "0:v:0", "-map", "1:a:0?",
@@ -122,7 +117,7 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
     if mux.returncode != 0:
         detail = mux.stderr[-1600:] if mux.stderr else "Audio/video export failed."
         raise RuntimeError(detail)
-    return detected_any
+    return True
 
 def create_clips(source, output_dir, duration, count, progress):
     total = probe_duration(source)
@@ -137,14 +132,12 @@ def create_clips(source, output_dir, duration, count, progress):
         starts = [last_start * i / (count - 1) for i in range(count)]
 
     outputs = []
-    any_face = False
     for index, start in enumerate(starts, 1):
         out = Path(output_dir) / f"Ajay_Short_{index:02d}.mp4"
-        detected = make_vertical_clip(source, out, start, clip_len)
-        any_face = any_face or detected
+        make_vertical_clip(source, out, start, clip_len)
         outputs.append(out)
         progress.progress(int(index / count * 100), text=f"Creating Short {index} of {count}...")
-    return outputs, total, any_face
+    return outputs, total
 
 if page == "Dashboard":
     st.title("🎬 Ajay AI Creator")
@@ -157,7 +150,7 @@ if page == "Dashboard":
     st.divider()
     st.header("Start Creating")
     st.write("Upload a video you own or have permission to process.")
-    st.info("Face-aware framing and separate MP4 downloads are available in this build. AI viral-moment selection, auto captions and YouTube publishing are not active yet.")
+    st.info("Stable 9:16 framing and separate MP4 downloads are available. AI highlight selection, auto captions and YouTube publishing are not active yet.")
 
 elif page == "Upload Video":
     st.title("📤 Upload Your Video")
@@ -173,7 +166,7 @@ elif page == "Upload Video":
         st.subheader("Create vertical Shorts")
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=3)
-        st.caption("The app will try to keep a detected face near the center. If no face is detected, it uses the center of the frame.")
+        st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
         st.warning("Important: clips are still selected at evenly spaced positions. This is not AI viral analysis yet.")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
@@ -187,17 +180,13 @@ elif page == "Upload Video":
                 output_dir.mkdir()
                 progress = st.progress(0, text="Preparing video...")
                 try:
-                    outputs, total, face_found = create_clips(
+                    outputs, total = create_clips(
                         source_path, output_dir, clip_duration, clip_count, progress
                     )
                     st.session_state["ajay_short_files"] = [str(p) for p in outputs]
                     st.session_state["ajay_short_names"] = [p.name for p in outputs]
-                    st.session_state["ajay_face_detected"] = face_found
                     st.success(f"Created {len(outputs)} individual MP4 Shorts.")
-                    if face_found:
-                        st.info("A face was detected in at least part of the video; the crop was adjusted to follow it.")
-                    else:
-                        st.warning("No clear face was detected. Center framing was used; please check the preview.")
+                    st.info("স্থির 9:16 ফ্রেম তৈরি হয়েছে। আসল ভিডিওটি মাঝখানে রাখা হয়েছে, তাই মুখ বা ছবি আর এদিক-ওদিক লাফাবে না।")
                 except Exception as exc:
                     st.error(f"Could not create Shorts: {exc}")
 
