@@ -497,18 +497,26 @@ elif page == "Upload Video":
 
 elif page == "Shorts & Captions":
     st.title("✍️ Shorts & Captions")
-    st.info("ভিডিও প্রসেস হলে প্রতিটি Short-এর জন্য প্রাথমিক Title, Description ও Tags সাজেশন দেখা যাবে। অটো সাবটাইটেল সাময়িকভাবে বন্ধ।")
-    generated = st.session_state.get("ajay_metadata", []) or st.session_state.get("ajay_yt_metadata", [])
-    if generated:
-        for n, item in enumerate(generated, 1):
-            with st.expander(f"Short {n} — তৈরি করা মেটাডেটা", expanded=(n == 1)):
-                st.text_input("Title (সম্পাদনা করুন)", item["title"], key=f"meta_title_{n}")
-                st.text_area("Description (সম্পাদনা করুন)", item["description"], key=f"meta_desc_{n}", height=110)
-                st.text_area("Tags / Hashtags (কমা দিয়ে আলাদা করুন)", ", ".join(item["tags"]), key=f"meta_tags_{n}", height=90)
-                st.caption("এগুলো প্রাথমিক ড্রাফট। বর্তমানে অটো ট্রান্সক্রিপ্ট/AI ক্যাপশন চালু নেই; প্রকাশের আগে নিজের মতো সম্পাদনা করুন। ভাইরাল হওয়ার নিশ্চয়তা নেই।")
-    else:
-        st.warning("আগে Upload Video পেজে ভিডিও থেকে Shorts তৈরি করুন।")
-
+    st.write("এখানে তৈরি Shorts-এর Title, Description ও Tags দেখা ও সম্পাদনা করতে পারবেন।")
+    file_meta = st.session_state.get("ajay_metadata", [])
+    youtube_meta = st.session_state.get("ajay_yt_metadata", [])
+    generated = [("আপলোড করা ভিডিও", file_meta), ("YouTube লিংক", youtube_meta)]
+    shown = 0
+    for source_label, items in generated:
+        if items:
+            st.subheader(source_label)
+            for n, item in enumerate(items, 1):
+                shown += 1
+                with st.expander(f"{source_label} — Short {n}", expanded=(shown == 1)):
+                    st.text_input("Title", value=item.get("title", ""), key=f"meta_{source_label}_{n}_title")
+                    st.text_area("Description", value=item.get("description", ""), key=f"meta_{source_label}_{n}_description", height=110)
+                    st.text_area("Tags (কমা দিয়ে আলাদা করুন)", value=", ".join(item.get("tags", [])), key=f"meta_{source_label}_{n}_tags", height=80)
+                    if not item.get("transcript"):
+                        st.info("এই Short-এর অডিও থেকে কথার ট্রান্সক্রিপ্ট তৈরি হয়নি। তাই Title/Description/Tags সাধারণ প্রাথমিক খসড়া; AI-তৈরি বা ভাইরাল বলে ধরে নেবেন না।")
+    if not shown:
+        st.warning("এখনো কোনো Short তৈরি হয়নি। বাম পাশের Upload Video পেজে গিয়ে ছোট MP4 আপলোড করে Create Shorts চাপুন।")
+    st.divider()
+    st.caption("অটো স্পিচ-টু-টেক্সট ক্যাপশন এই Free Starter সংস্করণে চালু নেই। SRT ফাইল তৈরি হলেও ট্রান্সক্রিপ্ট না থাকলে সেটি ফাঁকা থাকবে।")
 
 elif page == "YouTube Channels":
     st.title("📺 YouTube Channels")
@@ -541,41 +549,36 @@ elif page == "YouTube Channels":
 
 elif page == "Schedule":
     st.title("🗓️ Schedule")
-    st.caption("এখানে প্রকাশের পরিকল্পনা তৈরি ও দেখা যাবে। Google OAuth/API সংযোগ ছাড়া YouTube-এ স্বয়ংক্রিয় প্রকাশ হবে না।")
+    st.write("এটি আপাতত আপনার প্রকাশের পরিকল্পনার তালিকা—এখান থেকে YouTube-এ ভিডিও আপলোড বা Auto Publish হয় না।")
     schedule_items = st.session_state.setdefault("ajay_schedule_items", [])
     available_shorts = st.session_state.get("ajay_short_names", []) + st.session_state.get("ajay_yt_short_names", [])
-    if not available_shorts:
-        st.info("আগে Upload Video পেজে ভিডিও থেকে অন্তত একটি Short তৈরি করুন।")
-    else:
-        with st.form("schedule_form", clear_on_submit=True):
+    with st.form("schedule_form", clear_on_submit=True):
+        if available_shorts:
             selected_short = st.selectbox("কোন Short-এর জন্য পরিকল্পনা করবেন?", available_shorts)
-            schedule_date = st.date_input("প্রকাশের তারিখ")
-            schedule_time = st.time_input("প্রকাশের সময়")
-            selected_channel = st.selectbox(
-                "চ্যানেল লিংক (ঐচ্ছিক)",
-                ["চ্যানেল নির্বাচন করা হয়নি"] + [
-                    c.get("name", c.get("url", "Channel"))
-                    for c in st.session_state.get("ajay_channel_links", [])
-                ]
-            )
-            schedule_submitted = st.form_submit_button("শিডিউল পরিকল্পনা সংরক্ষণ করুন")
-        if schedule_submitted:
-            schedule_items.append({
-                "short": selected_short,
-                "date": str(schedule_date),
-                "time": str(schedule_time),
-                "channel": selected_channel
-            })
-            st.success("শিডিউল পরিকল্পনাটি এই সেশনে সংরক্ষিত হয়েছে।")
+        else:
+            selected_short = st.text_input("Short-এর নাম লিখুন", placeholder="যেমন: Ajay_Short_01.mp4")
+            st.caption("Short তৈরি না করেও পরিকল্পনার নাম লিখতে পারবেন।")
+        schedule_date = st.date_input("প্রকাশের তারিখ")
+        schedule_time = st.time_input("প্রকাশের সময়")
+        channel_options = ["চ্যানেল নির্বাচন করা হয়নি"] + [
+            c.get("name", c.get("url", "Channel")) for c in st.session_state.get("ajay_channel_links", [])
+        ]
+        selected_channel = st.selectbox("কোন চ্যানেলের জন্য?", channel_options)
+        schedule_submitted = st.form_submit_button("পরিকল্পনা সংরক্ষণ করুন")
+    if schedule_submitted:
+        if not str(selected_short).strip():
+            st.error("আগে তৈরি Short বেছে নিন অথবা Short-এর নাম লিখুন।")
+        else:
+            schedule_items.append({"short": str(selected_short).strip(), "date": str(schedule_date), "time": str(schedule_time), "channel": selected_channel})
+            st.success("পরিকল্পনাটি এই সেশনে সংরক্ষিত হয়েছে।")
     if schedule_items:
-        st.subheader("আপনার শিডিউল পরিকল্পনা")
+        st.subheader("সংরক্ষিত পরিকল্পনা")
         for i, item in enumerate(schedule_items):
             st.write(f"{i+1}. {item['short']} — {item['date']} {item['time']} — {item['channel']}")
-            if st.button("পরিকল্পনা মুছুন", key=f"delete_schedule_{i}"):
+            if st.button("এই পরিকল্পনা মুছুন", key=f"delete_schedule_{i}"):
                 schedule_items.pop(i)
                 st.rerun()
-    st.warning("সহজ ভাষায়: এই তালিকাটি শুধু আপনার প্রকাশের তারিখ-সময় মনে রাখে। এটি YouTube-এ ভিডিও পাঠায় না বা নিজে থেকে প্রকাশ করে না। আসল Auto Schedule চালাতে Google-এর অনুমোদিত Connect account ব্যবস্থা, API credentials এবং সার্ভারে নিরাপদ secrets যোগ করতে হবে।")
-
+    st.warning("গুরুত্বপূর্ণ: পরিকল্পনাগুলো শুধু Streamlit-এর বর্তমান session-এ থাকে; অ্যাপ restart হলে মুছে যেতে পারে। স্থায়ী সংরক্ষণ ও YouTube-এ নির্দিষ্ট সময়ে প্রকাশের জন্য database, Google OAuth এবং YouTube Data API কনফিগার করতে হবে।")
 
 st.divider()
 st.caption("Ajay AI Creator | Free Starter Version")
