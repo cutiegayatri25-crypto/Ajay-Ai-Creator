@@ -1,6 +1,4 @@
 streamlit>=1.40,<2
-opencv-python-headless>=4.10,<5
-numpy>=1.26,<2.3
 yt-dlp>=2025.1.15,<2027
 google-auth-oauthlib>=1.2,<2
 google-api-python-client>=2.150,<3
