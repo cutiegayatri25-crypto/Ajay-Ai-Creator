@@ -246,7 +246,6 @@ elif page == "Upload Video":
                 opts = {
                     "format": "bestvideo*+bestaudio/best",
                     "format_sort": ["res:1080", "ext:mp4:m4a"],
-                    "format_fallback": "best",
                     "outtmpl": str(Path(yt_dir) / "source.%(ext)s"),
                     "merge_output_format": "mp4",
                     "noplaylist": True,
