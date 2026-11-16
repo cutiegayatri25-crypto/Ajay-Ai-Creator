@@ -78,19 +78,15 @@ def ensure_bgutil_pot_provider():
         )
         if compile_result.returncode != 0 or not build_file.exists():
             raise RuntimeError("PO Token Provider build failed: " + (compile_result.stderr or compile_result.stdout)[-1600:])
-    existing = st.session_state.get("_bgutil_provider_process")
-    if existing is not None and existing.poll() is None:
-        return "http://127.0.0.1:4416"
     process = subprocess.Popen(
         [node, str(build_file), "--host", "127.0.0.1", "--port", "4416"],
         cwd=str(server_dir), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
-    st.session_state["_bgutil_provider_process"] = process
     import time
     time.sleep(2)
     if process.poll() is not None:
         raise RuntimeError("PO Token Provider server চালু হয়নি।")
-    return "http://127.0.0.1:4416"
+    return process
 
 
 def save_dashboard_youtube_url():
@@ -390,7 +386,7 @@ elif page == "Upload Video":
                 last_error = None
                 # Start a local BgUtils PO-token provider before asking YouTube for formats.
                 progress.progress(3, text="YouTube নিরাপদ ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
-                pot_provider_url = ensure_bgutil_pot_provider()
+                pot_provider_process = ensure_bgutil_pot_provider()
                 # mweb uses the installed provider for video-server PO tokens.
                 download_profiles = [
                     {"format": "best", "extractor_args": {"youtube": {"player_client": ["mweb"]}}},
