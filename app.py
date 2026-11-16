@@ -12,9 +12,11 @@ st.set_page_config(page_title="Ajay AI Creator", page_icon="🎬", layout="wide"
 
 st.markdown("""
 <style>
-.stApp { background: #0b1020; color: white; }
-h1, h2, h3 { color: #f4c95d; }
-[data-testid="stSidebar"] { background: #151f36; }
+.stApp { background: linear-gradient(135deg, #101026 0%, #17143b 55%, #0b2233 100%); color: #f4f7ff; }
+h1, h2, h3 { color: #55e6df; }
+[data-testid="stSidebar"] { background: #11132b; }
+[data-testid="stMetric"] { background: rgba(41, 51, 91, 0.55); padding: 12px; border: 1px solid #38466d; border-radius: 12px; }
+[data-testid="stAlert"] { border-radius: 12px; }
 div.stButton > button {
     background: #e7b94f; color: #111827;
     border-radius: 8px; font-weight: bold;
@@ -29,6 +31,8 @@ div[data-testid="stDownloadButton"] > button {
 </style>
 """, unsafe_allow_html=True)
 
+if Path("logo.svg").exists():
+    st.sidebar.image("logo.svg", width=150)
 st.sidebar.title("🎬 Ajay AI Creator")
 st.sidebar.caption("Your Personal AI Shorts Studio")
 page = st.sidebar.radio(
@@ -205,8 +209,13 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
     return outputs, subtitles, total
 
 if page == "Dashboard":
+    if Path("logo.svg").exists():
+        st.image("logo.svg", width=210)
     st.title("🎬 Ajay AI Creator")
     st.subheader("Your Personal AI Shorts Studio")
+    st.markdown("### 🔗 YouTube লিংক এখানে পেস্ট করুন")
+    st.text_input("YouTube ভিডিওর লিংক", placeholder="https://www.youtube.com/watch?v=...", key="youtube_url_input")
+    st.info("লিংক দেওয়ার পর বাম পাশের Upload Video পেজে যান এবং “YouTube লিংক থেকে Shorts তৈরি করুন” চাপুন।")
     st.success("Welcome to your AI Shorts Studio!")
     col1, col2, col3 = st.columns(3)
     col1.metric("Video tools", "Ready")
@@ -222,7 +231,7 @@ elif page == "Upload Video":
     st.caption("শুধু নিজের ভিডিও বা ব্যবহারের অনুমতি থাকা ভিডিও ব্যবহার করুন।")
 
     st.subheader("🔗 YouTube লিংক থেকে Shorts")
-    youtube_url = st.text_input("YouTube ভিডিওর লিংক দিন", placeholder="https://www.youtube.com/watch?v=...")
+    youtube_url = st.text_input("YouTube ভিডিওর লিংক দিন", placeholder="https://www.youtube.com/watch?v=...", key="youtube_url_input")
     yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 10, key="yt_count")
     yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
     st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
@@ -288,10 +297,6 @@ elif page == "Upload Video":
     st.divider()
     st.subheader("অথবা ভিডিও ফাইল আপলোড করুন")
     st.caption("বড় ভিডিও আপলোডে সার্ভারের মেমোরি ও সাইজের সীমা থাকতে পারে।")
-    video = st.file_uploader(
-        "Choose a video", type=["mp4", "mov", "mkv", "webm"],
-        help="Large uploads may still be limited by Streamlit Community Cloud memory and server limits."
-    )
     st.title("📤 Upload Your Video")
     st.caption("Use videos you own or have permission to process.")
     video = st.file_uploader(
