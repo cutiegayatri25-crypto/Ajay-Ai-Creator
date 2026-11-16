@@ -442,7 +442,7 @@ elif page == "Upload Video":
                 st.info("ভিডিও প্রসেস সম্পন্ন। এই Free Starter সংস্করণে অটো ট্রান্সক্রিপশন বন্ধ; তাই Shorts সমান ব্যবধানে তৈরি হয়েছে এবং Title/Description/Tags সাধারণ ড্রাফট হিসেবে দেখানো হবে।")
             except Exception as exc:
                 st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
-                st.caption("কিছু ভিডিও YouTube-এর সীমাবদ্ধতা, অনুমতি বা সার্ভার নীতির কারণে ডাউনলোড করা যায় না। সে ক্ষেত্রে নিজের অনুমোদিত ভিডিও ফাইলটি Upload Video অংশে আপলোড করুন।")
+                st.caption("YouTube-এর সার্ভার, PO Token বা নেটওয়ার্ক সীমাবদ্ধতার কারণে এই লিংকটি প্রসেস করা যায়নি। উপরের Error details দেখে ডাউনলোড সংযোগটি পরীক্ষা করুন।")
 
     yt_files = st.session_state.get("ajay_yt_short_files", [])
     yt_names = st.session_state.get("ajay_yt_short_names", [])
