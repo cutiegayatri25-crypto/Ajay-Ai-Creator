@@ -10,13 +10,11 @@ A free-first personal Shorts maker hosted on Streamlit Community Cloud.
 - Paste a YouTube URL for best-effort downloading where YouTube permits it.
 - Basic draft title, description and tags are shown for each Short.
 
-## YouTube OAuth and scheduled upload setup
-- The app now includes a Google OAuth connection flow and a YouTube upload/schedule form.
-- These features remain inactive until the owner configures a Google Cloud OAuth Web Client and adds `[google_oauth]` secrets in Streamlit Community Cloud.
-- Required Streamlit secrets: `client_id`, `client_secret`, and `redirect_uri` under `[google_oauth]`. Never commit these secrets to GitHub or share them in chat.
-- Enable YouTube Data API v3, configure the exact app URL as an Authorized redirect URI, and add the Google account as a test user if the OAuth consent screen is in Testing.
-- The app requests YouTube upload and read-only scopes. After connecting, a generated Short can be uploaded as Private with a future `publishAt` time (IST).
-- OAuth credentials currently live only in the active Streamlit session. A persistent encrypted token store is still needed for reliable multi-session/multi-channel use; do not treat this as a finished multi-user production system.
+## YouTube connection and scheduling status
+- The current app does **not** contain a working Google OAuth connection flow or YouTube upload form.
+- The YouTube Channels page only keeps channel URLs in the active Streamlit session. It does not authenticate a Google account.
+- The Schedule page only keeps a temporary planning list in the active Streamlit session. It does not upload or schedule videos on YouTube.
+- Real YouTube publishing requires a Google OAuth flow, YouTube Data API integration, secure secrets, and persistent token/storage handling. These are not implemented in this starter build.
 
 ## Temporarily unavailable / not yet connected
 - Automatic speech-to-text captions: paused to keep the free cloud deployment lightweight.
