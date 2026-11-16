@@ -219,8 +219,19 @@ def burn_subtitles(video_path, srt_path):
 def choose_starts(rows, total, clip_len, count):
     if total <= clip_len:
         return [0.0]
+
+    # Without the optional speech model, choose evenly spaced clips instead of
+    # accidentally selecting the final moments of the source video.
+    if not rows:
+        max_unique = max(1, int((total - clip_len) / max(1.0, clip_len * 0.75)) + 1)
+        actual_count = min(int(count), max_unique)
+        if actual_count == 1:
+            return [0.0]
+        gap = (total - clip_len) / (actual_count - 1)
+        return [round(i * gap, 2) for i in range(actual_count)]
+
     hooks = ["why", "how", "secret", "truth", "never", "best", "mistake", "amazing",
-             "কেন", "কিভাবে", "সত্যি", "গোপন", "ভুল", "কিন্তু", "কেন", "कैसे", "क्यों", "सच"]
+             "কেন", "কিভাবে", "সত্যি", "গোপন", "ভুল", "কিন্তু", "कैसे", "क्यों", "सच"]
     candidates = []
     step = max(3.0, min(8.0, clip_len / 4))
     t = 0.0
@@ -404,7 +415,7 @@ elif page == "Upload Video":
                 yt_starts = choose_starts(transcript, total, clip_len, len(outputs))
                 st.session_state["ajay_yt_metadata"] = save_clip_metadata(transcript, yt_starts, clip_len)
                 st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}টি Shorts তৈরি হয়েছে। ভাষা: {language}")
-                st.info("ভিডিও প্রসেস সম্পন্ন। এই ফ্রি স্টার্টার সংস্করণে অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে।")
+                st.info("ভিডিও প্রসেস সম্পন্ন। অটো ক্যাপশন সাময়িকভাবে বন্ধ; Shorts-এর সময় ভিডিও জুড়ে সমানভাবে বেছে নেওয়া হয়েছে।")
             except Exception as exc:
                 st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
                 st.caption("কিছু ভিডিও YouTube-এর সীমাবদ্ধতা, অনুমতি বা সার্ভার নীতির কারণে ডাউনলোড করা যায় না। সে ক্ষেত্রে নিজের অনুমোদিত ভিডিও ফাইলটি Upload Video অংশে আপলোড করুন।")
@@ -432,7 +443,7 @@ elif page == "Upload Video":
                         st.video(yt_files[i])
                         with open(yt_files[i], "rb") as vf:
                             st.download_button("⬇ MP4", vf.read(), file_name=yt_names[i], mime="video/mp4", key=f"yt_mp4_{i}")
-                    if i < len(yt_srts) and os.path.exists(yt_srts[i]):
+                    if i < len(yt_srts) and os.path.exists(yt_srts[i]) and os.path.getsize(yt_srts[i]) > 0:
                         with open(yt_srts[i], "rb") as sf:
                             st.download_button("💬 SRT", sf.read(), file_name=Path(yt_srts[i]).name, mime="application/x-subrip", key=f"yt_srt_{i}")
 
@@ -453,7 +464,7 @@ elif page == "Upload Video":
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=3)
         st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
-        st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে; ক্লিপের সময় বেছে নেওয়া হবে সাধারণ নিয়মে।")
+        st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। অটো ক্যাপশন সাময়িকভাবে বন্ধ; আপাতত ভিডিওর বিভিন্ন অংশ থেকে সমান ব্যবধানে ক্লিপ নেওয়া হবে।")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
                 st.error("Video tools are not installed on the server yet.")
@@ -520,7 +531,7 @@ elif page == "Upload Video":
                                 key=f"download_short_{idx}",
                                 use_container_width=True
                             )
-                        if len(saved_subtitles) >= idx and os.path.exists(saved_subtitles[idx - 1]):
+                        if len(saved_subtitles) >= idx and os.path.exists(saved_subtitles[idx - 1]) and os.path.getsize(saved_subtitles[idx - 1]) > 0:
                             with open(saved_subtitles[idx - 1], "rb") as sf:
                                 st.download_button(
                                     "💬 SRT",
@@ -544,7 +555,7 @@ elif page == "Shorts & Captions":
                 st.text_area("Auto description", item["description"], key=f"meta_desc_{n}", height=110)
                 st.write("**Tags**")
                 st.write(", ".join(item["tags"]))
-                st.caption("এগুলো ভিডিওর ট্রান্সক্রিপ্ট থেকে স্বয়ংক্রিয় প্রাথমিক সাজেশন; ভাইরাল হওয়ার নিশ্চয়তা নয়।")
+                st.caption("এগুলো প্রাথমিক ড্রাফট; বর্তমানে অটো ট্রান্সক্রিপ্ট/AI ক্যাপশন চালু নেই এবং ভাইরাল হওয়ার নিশ্চয়তা নয়।")
     else:
         st.warning("আগে Upload Video পেজে ভিডিও থেকে Shorts তৈরি করুন।")
 
