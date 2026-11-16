@@ -39,10 +39,6 @@ def show_logo(path, width):
         # Keep the app running if an optional logo file is invalid.
         pass
 
-# Show the same profile logo once in the sidebar.
-with st.sidebar:
-    show_logo("logo.webp", 72)
-
 st.sidebar.title("🎬 Ajay AI Creator")
 st.sidebar.caption("Your Personal AI Shorts Studio")
 page = st.sidebar.radio(
@@ -124,13 +120,27 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
     if not os.path.exists(temp_video) or os.path.getsize(temp_video) == 0:
         raise RuntimeError("No frames were produced from this clip.")
 
-    mux = subprocess.run([
-        "ffmpeg", "-y", "-i", temp_video, "-ss", str(start), "-i", str(source),
-        "-t", str(length), "-map", "0:v:0", "-map", "1:a:0?",
+    # Add the app's own logo as a subtle watermark to every exported Short.
+    logo_path = Path("logo.webp")
+    ffmpeg_cmd = [
+        "ffmpeg", "-y", "-i", temp_video, "-ss", str(start), "-i", str(source)
+    ]
+    if logo_path.exists():
+        ffmpeg_cmd += [
+            "-i", str(logo_path),
+            "-filter_complex",
+            "[0:v][2:v]overlay=W-w-24:24:format=auto[v]",
+            "-map", "[v]", "-map", "1:a:0?"
+        ]
+    else:
+        ffmpeg_cmd += ["-map", "0:v:0", "-map", "1:a:0?"]
+    ffmpeg_cmd += [
+        "-t", str(length),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart",
         str(output)
-    ], capture_output=True, text=True)
+    ]
+    mux = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
     try:
         os.remove(temp_video)
     except OSError:
