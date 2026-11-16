@@ -39,7 +39,10 @@ def show_logo(path, width):
         # Keep the app running if an optional logo file is invalid.
         pass
 
-show_logo("logo.webp", 150)
+# Show the same profile logo once in the sidebar.
+with st.sidebar:
+    show_logo("logo.webp", 72)
+
 st.sidebar.title("🎬 Ajay AI Creator")
 st.sidebar.caption("Your Personal AI Shorts Studio")
 page = st.sidebar.radio(
@@ -216,6 +219,7 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
     return outputs, subtitles, total
 
 if page == "Dashboard":
+    # One larger copy of the same logo in the main dashboard; no duplicate above it.
     show_logo("logo.webp", 210)
     st.title("🎬 Ajay AI Creator")
     st.subheader("Your Personal AI Shorts Studio")
