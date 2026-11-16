@@ -48,6 +48,51 @@ def find_tool(name):
     return shutil.which(name)
 
 
+@st.cache_resource
+def ensure_bgutil_pot_provider():
+    """Install and start a local PO-token provider once per Streamlit server process."""
+    provider_dir = Path(tempfile.gettempdir()) / "bgutil-ytdlp-pot-provider-2.0.2"
+    server_dir = provider_dir / "server"
+    node = shutil.which("node")
+    npm = shutil.which("npm")
+    if not node or not npm:
+        raise RuntimeError("Node.js 22+ বা npm পাওয়া যায়নি; PO Token Provider চালু করা যায়নি।")
+    if not (server_dir / "package.json").exists():
+        clone = subprocess.run(
+            ["git", "clone", "--depth", "1", "--branch", "2.0.2",
+             "https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git", str(provider_dir)],
+            capture_output=True, text=True, timeout=180
+        )
+        if clone.returncode != 0:
+            raise RuntimeError("PO Token Provider source download failed: " + (clone.stderr or clone.stdout)[-1200:])
+    build_file = server_dir / "build" / "main.js"
+    if not build_file.exists():
+        install = subprocess.run(
+            [npm, "ci"], cwd=str(server_dir), capture_output=True, text=True, timeout=300
+        )
+        if install.returncode != 0:
+            raise RuntimeError("PO Token Provider dependency install failed: " + (install.stderr or install.stdout)[-1600:])
+        compile_result = subprocess.run(
+            [npm, "exec", "--", "tsc"], cwd=str(server_dir),
+            capture_output=True, text=True, timeout=180
+        )
+        if compile_result.returncode != 0 or not build_file.exists():
+            raise RuntimeError("PO Token Provider build failed: " + (compile_result.stderr or compile_result.stdout)[-1600:])
+    existing = st.session_state.get("_bgutil_provider_process")
+    if existing is not None and existing.poll() is None:
+        return "http://127.0.0.1:4416"
+    process = subprocess.Popen(
+        [node, str(build_file), "--host", "127.0.0.1", "--port", "4416"],
+        cwd=str(server_dir), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    st.session_state["_bgutil_provider_process"] = process
+    import time
+    time.sleep(2)
+    if process.poll() is not None:
+        raise RuntimeError("PO Token Provider server চালু হয়নি।")
+    return "http://127.0.0.1:4416"
+
+
 def save_dashboard_youtube_url():
     st.session_state["saved_youtube_url"] = st.session_state.get("youtube_url_dashboard", "").strip()
 
@@ -343,10 +388,12 @@ elif page == "Upload Video":
                 info = None
                 downloaded = None
                 last_error = None
-                # Avoid strict height/extension filters: some YouTube videos expose
-                # different formats depending on the player client.
+                # Start a local BgUtils PO-token provider before asking YouTube for formats.
+                progress.progress(3, text="YouTube নিরাপদ ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
+                pot_provider_url = ensure_bgutil_pot_provider()
+                # mweb uses the installed provider for video-server PO tokens.
                 download_profiles = [
-                    {"format": "best"},
+                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["mweb"]}}},
                     {"format": "best", "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
                     {"format": "best", "extractor_args": {"youtube": {"player_client": ["android"]}}},
                 ]
