@@ -153,12 +153,18 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
 
 @st.cache_resource(show_spinner="Speech recognition model is loading for the first time...")
 def load_whisper_model():
-    from faster_whisper import WhisperModel
+    # Optional feature: keep the core app deployable without the large ML runtime.
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        return None
     return WhisperModel("tiny", device="cpu", compute_type="int8")
 
 
 def transcribe_video(source):
     model = load_whisper_model()
+    if model is None:
+        return [], "not enabled in free starter build"
     segments, info = model.transcribe(str(source), vad_filter=True, beam_size=1)
     rows = []
     for seg in segments:
@@ -317,7 +323,7 @@ if page == "Dashboard":
     st.divider()
     st.header("Start Creating")
     st.write("Upload a video you own or have permission to process.")
-    st.info("Stable framing, automatic speech-to-text subtitles and transcript-assisted highlight suggestions are included. Viral results are not guaranteed.")
+    st.info("Stable vertical framing and MP4 export are included. Automatic speech-to-text captions are temporarily paused in this free starter build. Viral results are not guaranteed.")
 
 elif page == "Upload Video":
     st.title("📤 Upload Video অথবা YouTube লিংক")
@@ -356,7 +362,6 @@ elif page == "Upload Video":
                     "restrictfilenames": True,
                     "cachedir": False,
                     "http_headers": {"User-Agent": "Mozilla/5.0"},
-                    "js_runtimes": {"deno": {}},
                     "source_address": "0.0.0.0",
                 }
                 last_error = None
@@ -385,7 +390,7 @@ elif page == "Upload Video":
                     if not candidates:
                         raise RuntimeError("ভিডিও ফাইল ডাউনলোড সম্পূর্ণ হয়নি।")
                     downloaded = candidates[0]
-                progress.progress(15, text="ভিডিও থেকে কথা শনাক্ত ও সাবটাইটেল তৈরি হচ্ছে...")
+                progress.progress(15, text="ভিডিও প্রসেস করা হচ্ছে...")
                 transcript, language = transcribe_video(downloaded)
                 out_dir = Path(yt_dir) / "shorts"
                 out_dir.mkdir()
@@ -399,7 +404,7 @@ elif page == "Upload Video":
                 yt_starts = choose_starts(transcript, total, clip_len, len(outputs))
                 st.session_state["ajay_yt_metadata"] = save_clip_metadata(transcript, yt_starts, clip_len)
                 st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}টি Shorts তৈরি হয়েছে। ভাষা: {language}")
-                st.info("অটো ক্যাপশন (SRT) এবং ভিডিওর বক্তব্য থেকে Title, Description ও Tags তৈরি হয়েছে।")
+                st.info("ভিডিও প্রসেস সম্পন্ন। এই ফ্রি স্টার্টার সংস্করণে অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে।")
             except Exception as exc:
                 st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
                 st.caption("কিছু ভিডিও YouTube-এর সীমাবদ্ধতা, অনুমতি বা সার্ভার নীতির কারণে ডাউনলোড করা যায় না। সে ক্ষেত্রে নিজের অনুমোদিত ভিডিও ফাইলটি Upload Video অংশে আপলোড করুন।")
@@ -448,7 +453,7 @@ elif page == "Upload Video":
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=3)
         st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
-        st.info("ভিডিওর কথা শুনে সাবটাইটেল তৈরি হবে এবং কথার আকর্ষণীয় অংশ দেখে ক্লিপ সাজেস্ট হবে।")
+        st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে; ক্লিপের সময় বেছে নেওয়া হবে সাধারণ নিয়মে।")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
                 st.error("Video tools are not installed on the server yet.")
@@ -461,7 +466,7 @@ elif page == "Upload Video":
                 output_dir.mkdir()
                 progress = st.progress(0, text="Preparing video...")
                 try:
-                    progress.progress(5, text="Transcribing speech for subtitles...")
+                    progress.progress(5, text="Preparing video clips...")
                     transcript, language = transcribe_video(source_path)
                     outputs, subtitle_files, total = create_clips(
                         source_path, output_dir, clip_duration, clip_count, progress, transcript
@@ -473,7 +478,7 @@ elif page == "Upload Video":
                     upload_starts = choose_starts(transcript, total, clip_len, len(outputs))
                     st.session_state["ajay_metadata"] = save_clip_metadata(transcript, upload_starts, clip_len)
                     st.success(f"Created {len(outputs)} suggested Shorts. Detected language: {language}.")
-                    st.info("অটো ক্যাপশন (SRT) এবং ভিডিওর বক্তব্য থেকে Title, Description ও Tags তৈরি হয়েছে।")
+                    st.info("ভিডিও প্রসেস সম্পন্ন। এই ফ্রি স্টার্টার সংস্করণে অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে।")
                 except Exception as exc:
                     st.error(f"Could not create Shorts: {exc}")
 
@@ -528,7 +533,7 @@ elif page == "Upload Video":
 
 elif page == "Shorts & Captions":
     st.title("✍️ Shorts & Captions")
-    st.info("ভিডিও প্রসেস হলে প্রতিটি Short-এর জন্য বক্তব্য-ভিত্তিক Title, Description, Tags এবং আলাদা SRT সাবটাইটেল তৈরি হয়।")
+    st.info("ভিডিও প্রসেস হলে প্রতিটি Short-এর জন্য প্রাথমিক Title, Description ও Tags সাজেশন দেখা যাবে। অটো সাবটাইটেল সাময়িকভাবে বন্ধ।")
     generated = st.session_state.get("ajay_metadata", []) or st.session_state.get("ajay_yt_metadata", [])
     if generated:
         for n, item in enumerate(generated, 1):
