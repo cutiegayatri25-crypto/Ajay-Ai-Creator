@@ -119,25 +119,83 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
         raise RuntimeError(detail)
     return True
 
-def create_clips(source, output_dir, duration, count, progress):
+def transcribe_video(source):
+    from faster_whisper import WhisperModel
+    model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    segments, info = model.transcribe(str(source), vad_filter=True, beam_size=1)
+    rows = []
+    for seg in segments:
+        txt = (seg.text or "").strip()
+        if txt:
+            rows.append({"start": float(seg.start), "end": float(seg.end), "text": txt})
+    if not rows:
+        raise RuntimeError("No clear speech was detected.")
+    return rows, info.language or "unknown"
+
+
+def write_srt(rows, clip_start, clip_length, path):
+    def stamp(value):
+        ms = int(max(0, value) * 1000)
+        hh, ms = divmod(ms, 3600000)
+        mm, ms = divmod(ms, 60000)
+        ss, ms = divmod(ms, 1000)
+        return f"{hh:02}:{mm:02}:{ss:02},{ms:03}"
+    lines = []
+    n = 1
+    for seg in rows:
+        left = max(clip_start, seg["start"])
+        right = min(clip_start + clip_length, seg["end"])
+        if right > left:
+            lines += [str(n), f"{stamp(left-clip_start)} --> {stamp(right-clip_start)}", seg["text"], ""]
+            n += 1
+    Path(path).write_text("\\n".join(lines), encoding="utf-8")
+
+
+def choose_starts(rows, total, clip_len, count):
+    if total <= clip_len:
+        return [0.0]
+    hooks = ["why", "how", "secret", "truth", "never", "best", "mistake", "amazing",
+             "কেন", "কিভাবে", "সত্যি", "গোপন", "ভুল", "কিন্তু", "কেন", "कैसे", "क्यों", "सच"]
+    candidates = []
+    step = max(3.0, min(8.0, clip_len / 4))
+    t = 0.0
+    while t <= total - clip_len:
+        score = 0.0
+        for seg in rows:
+            overlap = max(0.0, min(t + clip_len, seg["end"]) - max(t, seg["start"]))
+            if overlap:
+                txt = seg["text"].lower()
+                score += min(24, len(txt.split())) * 0.35 * overlap
+                score += sum(1.5 for word in hooks if word in txt) * overlap
+                score += (1.0 if "?" in txt or "!" in txt else 0.0) * overlap
+        candidates.append((score, t))
+        t += step
+    candidates.sort(reverse=True)
+    chosen = []
+    for score, start in candidates:
+        if all(abs(start - old) >= clip_len * 0.75 for old in chosen):
+            chosen.append(start)
+            if len(chosen) == count:
+                break
+    return sorted(chosen or [0.0])
+
+
+def create_clips(source, output_dir, duration, count, progress, transcript):
     total = probe_duration(source)
     if total < 3:
         raise ValueError("This video is too short to create Shorts.")
     clip_len = min(float(duration), total)
-    # Temporary candidate positions only: this is not AI viral-moment detection.
-    if count == 1 or total <= clip_len:
-        starts = [max(0, (total - clip_len) / 2)]
-    else:
-        last_start = max(0, total - clip_len)
-        starts = [last_start * i / (count - 1) for i in range(count)]
-
-    outputs = []
+    starts = choose_starts(transcript, total, clip_len, count)
+    outputs, subtitles = [], []
     for index, start in enumerate(starts, 1):
         out = Path(output_dir) / f"Ajay_Short_{index:02d}.mp4"
         make_vertical_clip(source, out, start, clip_len)
+        srt = Path(output_dir) / f"Ajay_Short_{index:02d}.srt"
+        write_srt(transcript, start, clip_len, srt)
         outputs.append(out)
-        progress.progress(int(index / count * 100), text=f"Creating Short {index} of {count}...")
-    return outputs, total
+        subtitles.append(srt)
+        progress.progress(int(index / len(starts) * 100), text=f"Creating Short {index} of {len(starts)}...")
+    return outputs, subtitles, total
 
 if page == "Dashboard":
     st.title("🎬 Ajay AI Creator")
@@ -150,7 +208,7 @@ if page == "Dashboard":
     st.divider()
     st.header("Start Creating")
     st.write("Upload a video you own or have permission to process.")
-    st.info("Stable 9:16 framing and separate MP4 downloads are available. AI highlight selection, auto captions and YouTube publishing are not active yet.")
+    st.info("Stable framing, automatic speech-to-text subtitles and transcript-assisted highlight suggestions are included. Viral results are not guaranteed.")
 
 elif page == "Upload Video":
     st.title("📤 Upload Your Video")
@@ -167,7 +225,7 @@ elif page == "Upload Video":
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=3)
         st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
-        st.warning("Important: clips are still selected at evenly spaced positions. This is not AI viral analysis yet.")
+        st.info("ভিডিওর কথা শুনে সাবটাইটেল তৈরি হবে এবং কথার আকর্ষণীয় অংশ দেখে ক্লিপ সাজেস্ট হবে।")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
                 st.error("Video tools are not installed on the server yet.")
@@ -180,18 +238,22 @@ elif page == "Upload Video":
                 output_dir.mkdir()
                 progress = st.progress(0, text="Preparing video...")
                 try:
-                    outputs, total = create_clips(
-                        source_path, output_dir, clip_duration, clip_count, progress
+                    progress.progress(5, text="Transcribing speech for subtitles...")
+                    transcript, language = transcribe_video(source_path)
+                    outputs, subtitle_files, total = create_clips(
+                        source_path, output_dir, clip_duration, clip_count, progress, transcript
                     )
                     st.session_state["ajay_short_files"] = [str(p) for p in outputs]
                     st.session_state["ajay_short_names"] = [p.name for p in outputs]
-                    st.success(f"Created {len(outputs)} individual MP4 Shorts.")
-                    st.info("স্থির 9:16 ফ্রেম তৈরি হয়েছে। আসল ভিডিওটি মাঝখানে রাখা হয়েছে, তাই মুখ বা ছবি আর এদিক-ওদিক লাফাবে না।")
+                    st.session_state["ajay_subtitle_files"] = [str(p) for p in subtitle_files]
+                    st.success(f"Created {len(outputs)} suggested Shorts. Detected language: {language}.")
+                    st.info("প্রতিটি ক্লিপের সাবটাইটেল .SRT ফাইল তৈরি হয়েছে। এটি সম্ভাবনাময় অংশের পরামর্শ, ভাইরাল হওয়ার নিশ্চয়তা নয়।")
                 except Exception as exc:
                     st.error(f"Could not create Shorts: {exc}")
 
         saved_files = st.session_state.get("ajay_short_files", [])
         saved_names = st.session_state.get("ajay_short_names", [])
+        saved_subtitles = st.session_state.get("ajay_subtitle_files", [])
         if saved_files:
             st.divider()
             st.subheader("Your Shorts")
@@ -218,10 +280,20 @@ elif page == "Upload Video":
                                 key=f"download_short_{idx}",
                                 use_container_width=True
                             )
+                        if len(saved_subtitles) >= idx and os.path.exists(saved_subtitles[idx - 1]):
+                            with open(saved_subtitles[idx - 1], "rb") as sf:
+                                st.download_button(
+                                    "💬 Download subtitles (.SRT)",
+                                    data=sf.read(),
+                                    file_name=Path(saved_subtitles[idx - 1]).name,
+                                    mime="application/x-subrip",
+                                    key=f"download_srt_{idx}",
+                                    use_container_width=True
+                                )
 
 elif page == "Shorts & Captions":
     st.title("✍️ Shorts & Captions")
-    st.info("Manual caption editor is available. Automatic speech-to-text captions and AI titles/hashtags are not connected yet.")
+    st.info("Upload Video পেজে অটোমেটিক সাবটাইটেল তৈরি হবে। প্রতিটি Short-এর পাশে .SRT ডাউনলোড পাবেন।")
     title = st.text_input("Shorts Title")
     caption = st.text_area("Write your caption")
     hashtags = st.text_input("Hashtags")
