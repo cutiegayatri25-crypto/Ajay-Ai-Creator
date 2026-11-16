@@ -2,3 +2,4 @@ streamlit>=1.40,<2
 opencv-python-headless>=4.10,<5
 numpy>=1.26,<3
 faster-whisper>=1.1,<2
+yt-dlp>=2025.1.15,<2027
