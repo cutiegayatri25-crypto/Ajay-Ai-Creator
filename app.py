@@ -213,6 +213,32 @@ def burn_subtitles(video_path, srt_path):
             pass
         # MP4 and downloadable SRT remain available even if the server lacks libass.
 
+
+def download_from_tunelio(youtube_url, api_key, output_path, progress):
+    """Download an authorized YouTube video through the optional hosted Tunelio API."""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    query = urllib.parse.urlencode({"url": youtube_url, "quality": "720p"})
+    request = urllib.request.Request(
+        "https://tunelio.dev/create?" + query,
+        headers={"Authorization": "Bearer " + api_key, "Accept": "application/json"},
+    )
+    progress.progress(5, text="বিকল্প ভিডিও সার্ভিস থেকে ডাউনলোড লিংক নেওয়া হচ্ছে...")
+    with urllib.request.urlopen(request, timeout=60) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if payload.get("status") != "ok" or not payload.get("url"):
+        raise RuntimeError(payload.get("error") or payload.get("message") or "ভিডিও ডাউনলোড লিংক পাওয়া যায়নি।")
+    progress.progress(10, text="ভিডিও নামানো হচ্ছে...")
+    media_request = urllib.request.Request(payload["url"], headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(media_request, timeout=180) as media_response, open(output_path, "wb") as output:
+        shutil.copyfileobj(media_response, output)
+    if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
+        raise RuntimeError("ডাউনলোড করা ভিডিও ফাইল খালি।")
+    progress.progress(15, text="ভিডিও ডাউনলোড হয়েছে; এখন Shorts তৈরি হচ্ছে...")
+    return {"title": payload.get("filename", "YouTube video")}, Path(output_path)
+
 def choose_starts(rows, total, clip_len, count):
     if total <= clip_len:
         return [0.0]
@@ -353,6 +379,12 @@ elif page == "Upload Video":
         key="youtube_url_upload",
         on_change=save_upload_youtube_url
     )
+    tunelio_api_key = st.text_input(
+        "বিকল্প ডাউনলোড সার্ভিসের API Key (ঐচ্ছিক)",
+        type="password",
+        key="tunelio_api_key",
+        help="নিজের Tunelio API key দিন। এটি এই Streamlit session-এ ব্যবহার হবে; কোডে রাখা হবে না।"
+    )
     yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 3, key="yt_count")
     yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
     st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
@@ -399,47 +431,59 @@ elif page == "Upload Video":
                 info = None
                 downloaded = None
                 last_error = None
-                # Start the optional local BgUtils PO-token provider. If Node.js,
-                # npm, or provider setup is unavailable, still try yt-dlp's other
-                # download clients instead of aborting the entire YouTube workflow.
-                progress.progress(3, text="YouTube ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
-                pot_provider_process = None
-                try:
-                    pot_provider_process = ensure_bgutil_pot_provider()
-                except Exception as provider_error:
-                    st.warning(
-                        "PO Token Provider চালু করা যায়নি; বিকল্প YouTube ডাউনলোড পদ্ধতি চেষ্টা করা হবে। "
-                        + str(provider_error)
-                    )
-                # mweb uses the installed provider for video-server PO tokens.
-                download_profiles = [
-                    # BgUtils recommends trying these clients together so yt-dlp
-                    # can request a PO token for a compatible client when needed.
-                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["mweb", "tv", "web_safari"]}}},
-                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
-                    {"format": "best", "extractor_args": {"youtube": {"player_client": ["android"]}}},
-                ]
-                for profile_index, profile in enumerate(download_profiles, 1):
+                if tunelio_api_key.strip():
+                    downloaded_path = Path(yt_dir) / "source.mp4"
                     try:
-                        opts = dict(base_opts, merge_output_format="mp4", **profile)
-                        with yt_dlp.YoutubeDL(opts) as ydl:
-                            info = ydl.extract_info(youtube_url.strip(), download=True)
-                            prepared = Path(ydl.prepare_filename(info))
-                        candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
-                        downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
-                        if downloaded:
-                            break
-                        last_error = "ডাউনলোডের পর ভিডিও ফাইল পাওয়া যায়নি।"
-                    except Exception as download_error:
-                        last_error = download_error
-                        # Remove incomplete files before trying another YouTube client.
-                        for partial in Path(yt_dir).glob("source.*"):
-                            try:
-                                partial.unlink()
-                            except OSError:
-                                pass
-                        if profile_index < len(download_profiles):
-                            progress.progress(8, text="এই পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প YouTube পদ্ধতি চেষ্টা হচ্ছে...")
+                        info, downloaded = download_from_tunelio(
+                            youtube_url.strip(), tunelio_api_key.strip(), downloaded_path, progress
+                        )
+                    except Exception as api_error:
+                        raise RuntimeError(
+                            "বিকল্প ডাউনলোড সার্ভিস কাজ করেনি। API Key, ফ্রি ক্রেডিট ও ভিডিওর অনুমতি যাচাই করুন। "
+                            + str(api_error)
+                        ) from api_error
+                if not downloaded:
+                    # Start the optional local BgUtils PO-token provider. If Node.js,
+                    # npm, or provider setup is unavailable, still try yt-dlp's other
+                    # download clients instead of aborting the entire YouTube workflow.
+                    progress.progress(3, text="YouTube ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
+                    pot_provider_process = None
+                    try:
+                        pot_provider_process = ensure_bgutil_pot_provider()
+                    except Exception as provider_error:
+                        st.warning(
+                            "PO Token Provider চালু করা যায়নি; বিকল্প YouTube ডাউনলোড পদ্ধতি চেষ্টা করা হবে। "
+                            + str(provider_error)
+                        )
+                    # mweb uses the installed provider for video-server PO tokens.
+                    download_profiles = [
+                        # BgUtils recommends trying these clients together so yt-dlp
+                        # can request a PO token for a compatible client when needed.
+                        {"format": "best", "extractor_args": {"youtube": {"player_client": ["mweb", "tv", "web_safari"]}}},
+                        {"format": "best", "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
+                        {"format": "best", "extractor_args": {"youtube": {"player_client": ["android"]}}},
+                    ]
+                    for profile_index, profile in enumerate(download_profiles, 1):
+                        try:
+                            opts = dict(base_opts, merge_output_format="mp4", **profile)
+                            with yt_dlp.YoutubeDL(opts) as ydl:
+                                info = ydl.extract_info(youtube_url.strip(), download=True)
+                                prepared = Path(ydl.prepare_filename(info))
+                            candidates = [prepared] + list(Path(yt_dir).glob("source.*"))
+                            downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
+                            if downloaded:
+                                break
+                            last_error = "ডাউনলোডের পর ভিডিও ফাইল পাওয়া যায়নি।"
+                        except Exception as download_error:
+                            last_error = download_error
+                            # Remove incomplete files before trying another YouTube client.
+                            for partial in Path(yt_dir).glob("source.*"):
+                                try:
+                                    partial.unlink()
+                                except OSError:
+                                    pass
+                            if profile_index < len(download_profiles):
+                                progress.progress(8, text="এই পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প YouTube পদ্ধতি চেষ্টা হচ্ছে...")
                 if not downloaded:
                     error_text = str(last_error or "ডাউনলোড সম্পূর্ণ হয়নি")
                     if "Sign in to confirm" in error_text or "not a bot" in error_text.lower():
