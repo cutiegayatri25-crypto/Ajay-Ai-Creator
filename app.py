@@ -399,9 +399,18 @@ elif page == "Upload Video":
                 info = None
                 downloaded = None
                 last_error = None
-                # Start a local BgUtils PO-token provider before asking YouTube for formats.
-                progress.progress(3, text="YouTube নিরাপদ ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
-                pot_provider_process = ensure_bgutil_pot_provider()
+                # Start the optional local BgUtils PO-token provider. If Node.js,
+                # npm, or provider setup is unavailable, still try yt-dlp's other
+                # download clients instead of aborting the entire YouTube workflow.
+                progress.progress(3, text="YouTube ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
+                pot_provider_process = None
+                try:
+                    pot_provider_process = ensure_bgutil_pot_provider()
+                except Exception as provider_error:
+                    st.warning(
+                        "PO Token Provider চালু করা যায়নি; বিকল্প YouTube ডাউনলোড পদ্ধতি চেষ্টা করা হবে। "
+                        + str(provider_error)
+                    )
                 # mweb uses the installed provider for video-server PO tokens.
                 download_profiles = [
                     # BgUtils recommends trying these clients together so yt-dlp
