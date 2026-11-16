@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import streamlit as st
 
-st.set_page_config(page_title="Ajay AI Creator", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="Ajay AI Creator", page_icon="logo.webp", layout="wide")
 
 st.markdown("""
 <style>
@@ -39,7 +39,8 @@ def show_logo(path, width):
         # Keep the app running if an optional logo file is invalid.
         pass
 
-st.sidebar.title("🎬 Ajay AI Creator")
+st.sidebar.image("logo.webp", width=76)
+st.sidebar.title("Ajay AI Creator")
 st.sidebar.caption("Your Personal AI Shorts Studio")
 page = st.sidebar.radio(
     "MENU", ["Dashboard", "Upload Video", "Shorts & Captions", "YouTube Channels", "Schedule"]
@@ -229,9 +230,12 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
     return outputs, subtitles, total
 
 if page == "Dashboard":
-    # One larger copy of the same logo in the main dashboard; no duplicate above it.
-    show_logo("logo.webp", 210)
-    st.title("🎬 Ajay AI Creator")
+    # Use the actual uploaded app logo in place of the old video emoji icon.
+    title_col_logo, title_col_text = st.columns([0.8, 8], vertical_alignment="center")
+    with title_col_logo:
+        show_logo("logo.webp", 76)
+    with title_col_text:
+        st.title("Ajay AI Creator")
     st.subheader("Your Personal AI Shorts Studio")
     st.markdown("### 🔗 YouTube লিংক এখানে পেস্ট করুন")
     st.text_input("YouTube ভিডিওর লিংক", placeholder="https://www.youtube.com/watch?v=...", key="youtube_url_input")
