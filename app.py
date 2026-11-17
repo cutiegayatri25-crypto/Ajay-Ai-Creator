@@ -127,14 +127,15 @@ def probe_duration(path):
     )
     return float(result.stdout.strip())
 
-def make_vertical_clip(source, output, start, length, progress_callback=None):
-    """Render a vertical clip in one FFmpeg pass for lower memory use and faster processing."""
+def make_vertical_clip(source, output, start, length, resolution="1080p"):
+    """Render a vertical 9:16 clip at the selected output resolution."""
+    width, height = (2160, 3840) if resolution == "4K" else (1080, 1920)
     logo_path = Path("logo.webp")
     filters = (
         "[0:v]split=2[bg][fg];"
-        "[bg]scale=720:1280:force_original_aspect_ratio=increase,"
-        "crop=720:1280,boxblur=18:2,eq=brightness=-0.12[background];"
-        "[fg]scale=720:1280:force_original_aspect_ratio=decrease[foreground];"
+        f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},boxblur=18:2,eq=brightness=-0.12[background];"
+        f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[foreground];"
         "[background][foreground]overlay=(W-w)/2:(H-h)/2[base]"
     )
     cmd = ["ffmpeg", "-y", "-ss", str(max(0, start)), "-i", str(source)]
@@ -146,7 +147,7 @@ def make_vertical_clip(source, output, start, length, progress_callback=None):
     cmd += [
         "-t", str(length), "-filter_complex", filters,
         "-map", video_map, "-map", "0:a:0?",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
         "-c:a", "aac", "-b:a", "128k", "-threads", "2",
         "-movflags", "+faststart", str(output)
     ]
@@ -228,7 +229,7 @@ def download_from_tunelio(youtube_url, api_key, output_path, progress):
     import urllib.parse
     import urllib.request
 
-    query = urllib.parse.urlencode({"url": youtube_url, "quality": "720p"})
+    query = urllib.parse.urlencode({"url": youtube_url, "quality": "1080p"})
     request = urllib.request.Request(
         "https://tunelio.dev/create?" + query,
         headers={"Authorization": "Bearer " + api_key, "Accept": "application/json"},
@@ -330,7 +331,7 @@ def save_clip_metadata(rows, starts, clip_length):
     return [generate_metadata(rows, start, clip_length, i) for i, start in enumerate(starts, 1)]
 
 
-def create_clips(source, output_dir, duration, count, progress, transcript):
+def create_clips(source, output_dir, duration, count, progress, transcript, resolution="1080p"):
     total = probe_duration(source)
     if total < 3:
         raise ValueError("This video is too short to create Shorts.")
@@ -339,7 +340,7 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
     outputs, subtitles = [], []
     for index, start in enumerate(starts, 1):
         out = Path(output_dir) / f"Ajay_Short_{index:02d}.mp4"
-        make_vertical_clip(source, out, start, clip_len)
+        make_vertical_clip(source, out, start, clip_len, resolution)
         srt = Path(output_dir) / f"Ajay_Short_{index:02d}.srt"
         write_srt(transcript, start, clip_len, srt)
         burn_subtitles(out, srt)
@@ -405,6 +406,8 @@ elif page == "Upload Video":
     )
     yt_count = st.slider("How many Shorts would you like to create?", 1, 10, 10, key="yt_count")
     yt_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1, key="yt_duration")
+    yt_resolution = st.selectbox("Shorts output resolution", ["1080p", "4K"], index=0, key="yt_resolution")
+    st.caption("1080p is recommended for the free server. 4K needs much more processing memory and may fail on large videos.")
     st.caption("Works only with publicly accessible videos you are authorized to process. Private, members-only, age-restricted, or DRM-protected videos may not work.")
     if st.button("▶ Create Shorts from YouTube Link", type="primary", disabled=not youtube_url.strip()):
         if not find_tool("ffmpeg") or not find_tool("ffprobe"):
@@ -523,11 +526,16 @@ elif page == "Upload Video":
                         raise RuntimeError("The video file download did not complete.")
                     downloaded = candidates[0]
                 progress.progress(15, text="Processing video...")
-                transcript, language = transcribe_video(downloaded)
+                try:
+                    transcript, language = transcribe_video(downloaded)
+                except Exception as transcription_error:
+                    # Speech recognition is optional: never let it prevent clip export.
+                    transcript, language = [], "unavailable; clips will use evenly spaced sections"
+                    st.warning("Automatic speech recognition was unavailable, so Shorts will still be created without transcript-based selection. Details: " + str(transcription_error)[:300])
                 out_dir = Path(yt_dir) / "shorts"
                 out_dir.mkdir()
                 outputs, subtitle_files, total = create_clips(
-                    downloaded, out_dir, yt_duration, yt_count, progress, transcript
+                    downloaded, out_dir, yt_duration, yt_count, progress, transcript, yt_resolution
                 )
                 st.session_state["ajay_yt_short_files"] = [str(p) for p in outputs]
                 st.session_state["ajay_yt_short_names"] = [p.name for p in outputs]
@@ -584,6 +592,8 @@ elif page == "Upload Video":
         st.subheader("Create vertical Shorts")
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=10)
+        output_resolution = st.selectbox("Shorts output resolution", ["1080p", "4K"], index=0, key="upload_output_resolution")
+        st.caption("1080p is recommended for the free server. 4K needs much more processing memory and may fail on large videos.")
         st.caption("The original video frame will be fitted without face tracking or dynamic reframing. The source aspect ratio will be preserved.")
         st.info("Your video will be converted into 9:16 Shorts using FFmpeg. Automatic captions are disabled in this Free Starter version, so clips will be selected at even intervals.")
         if st.button("🎬 Create Shorts", type="primary"):
@@ -599,9 +609,14 @@ elif page == "Upload Video":
                 progress = st.progress(0, text="Preparing video...")
                 try:
                     progress.progress(5, text="Preparing video clips...")
-                    transcript, language = transcribe_video(source_path)
+                    try:
+                        transcript, language = transcribe_video(source_path)
+                    except Exception as transcription_error:
+                        # Continue rendering even if optional speech recognition fails.
+                        transcript, language = [], "unavailable; clips will use evenly spaced sections"
+                        st.warning("Automatic speech recognition was unavailable, so Shorts will still be created without transcript-based selection. Details: " + str(transcription_error)[:300])
                     outputs, subtitle_files, total = create_clips(
-                        source_path, output_dir, clip_duration, clip_count, progress, transcript
+                        source_path, output_dir, clip_duration, clip_count, progress, transcript, output_resolution
                     )
                     st.session_state["ajay_short_files"] = [str(p) for p in outputs]
                     st.session_state["ajay_short_names"] = [p.name for p in outputs]
