@@ -314,7 +314,7 @@ def generate_metadata(rows, clip_start, clip_length, index=1):
     lead = " ".join(text.split()[:9]).strip(" ,.!?।")
     if len(lead) > 64:
         lead = lead[:61].rsplit(" ", 1)[0] + "…"
-    title = f"{lead} | Key Moment #{index}" if lead else f"এই ভিডিওর Key Moment #{index}"
+    title = f"{lead} | Key Moment #{index}" if lead else f"Key Moment from this video #{index}"
     tags = list(dict.fromkeys(["Shorts", "YouTubeShorts", "AjayAICreator"] + keywords))
     hashtags = " ".join("#" + re.sub(r"[^A-Za-z0-9_অ-হা-য়]", "", t) for t in tags[:8])
     description = (
@@ -352,7 +352,7 @@ if page == "Dashboard":
     st.markdown("""
     <section class="ajay-hero">
       <h1>🎬 Ajay AI Creator</h1>
-      <p>লম্বা YouTube From video Key Moment বেছে Shorts তৈরি করুন।</p>
+      <p>Turn long YouTube videos into Shorts by finding the most engaging moments.</p>
     </section>
     """, unsafe_allow_html=True)
     st.markdown("### 🚀 Paste Your Video Link")
@@ -366,7 +366,7 @@ if page == "Dashboard":
     st.info("After adding the link, open Upload Video from the sidebar. Choose the number and length of your Shorts to get started.")
     col1, col2, col3 = st.columns(3)
     col1.metric("From One Video", "Up to 10", "Shorts")
-    col2.metric("ভিডিও ফরম্যাট", "9:16", "Vertical")
+    col2.metric("Video Format", "9:16", "Vertical")
     col3.metric("Cost", "Free Starter", "No credits required")
     st.divider()
     st.subheader("✨ Your Shorts Studio")
@@ -374,7 +374,7 @@ if page == "Dashboard":
     feature_cards = [
         ("🎯 Key Moment", "Find potentially engaging sections using transcript density, questions, and hook phrases when transcription is available."),
         ("📱 Vertical Shorts", "Convert long videos into vertical 9:16 MP4 clips."),
-        ("✍️ Title ও Tags", "Editable title, description, and tag drafts for every clip."),
+        ("✍️ Titles & Tags", "Editable title, description, and tag drafts for every clip."),
         ("💬 Subtitles", "Generate SRT captions and burn them into the video when transcription is enabled."),
         ("⬇️ Individual Downloads", "Download each Short as a separate MP4 file."),
         ("📺 YouTube Channel Integration", "Direct publishing and scheduling can be added after YouTube OAuth and API setup.")
@@ -391,7 +391,7 @@ elif page == "Upload Video":
 
     st.subheader("🔗 Create Shorts from a YouTube Link")
     youtube_url = st.text_input(
-        "YouTube Video URL দিন",
+        "YouTube Video URL",
         value=st.session_state.get("saved_youtube_url", ""),
         placeholder="https://www.youtube.com/watch?v=...",
         key="youtube_url_upload",
@@ -520,7 +520,7 @@ elif page == "Upload Video":
                 if not downloaded.exists():
                     candidates = list(Path(yt_dir).glob("source.*"))
                     if not candidates:
-                        raise RuntimeError("ভিডিও ফাইল The download did not complete।")
+                        raise RuntimeError("The video file download did not complete.")
                     downloaded = candidates[0]
                 progress.progress(15, text="Processing video...")
                 transcript, language = transcribe_video(downloaded)
@@ -535,7 +535,7 @@ elif page == "Upload Video":
                 clip_len = min(float(yt_duration), total)
                 yt_starts = choose_starts(transcript, total, clip_len, len(outputs))
                 st.session_state["ajay_yt_metadata"] = save_clip_metadata(transcript, yt_starts, clip_len)
-                st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}Shorts created. Language: {language}")
+                st.success(f"{info.get('title', 'Video')}: {len(outputs)} Shorts created. Language: {language}")
                 st.info("Video processing is complete. Automatic transcription is disabled in this Free Starter version, so clips were selected at even intervals and metadata is shown as a basic draft.")
             except Exception as exc:
                 st.error(f"Could not create Shorts from the YouTube link: {exc}")
@@ -585,7 +585,7 @@ elif page == "Upload Video":
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=10)
         st.caption("The original video frame will be fitted without face tracking or dynamic reframing. The source aspect ratio will be preserved.")
-        st.info("From video 9:16 Shorts তৈরি হবে। দ্রুত FFmpeg প্রসেসিং ব্যবহার করা হচ্ছে। অটো ক্যাপশন এই Free Starter সংস্করণে বন্ধ; ক্লিপগুলো সমান ব্যবধানে নেওয়া হবে।")
+        st.info("Your video will be converted into 9:16 Shorts using FFmpeg. Automatic captions are disabled in this Free Starter version, so clips will be selected at even intervals.")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
                 st.error("Video tools are not installed on the server yet.")
@@ -610,7 +610,7 @@ elif page == "Upload Video":
                     upload_starts = choose_starts(transcript, total, clip_len, len(outputs))
                     st.session_state["ajay_metadata"] = save_clip_metadata(transcript, upload_starts, clip_len)
                     st.success(f"Created {len(outputs)} suggested Shorts. Detected language: {language}.")
-                    st.info("ভিডিও প্রসেস সম্পন্ন। এই Free Starter সংস্করণে অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে।")
+                    st.info("Video processing is complete. Automatic captions are temporarily disabled in this Free Starter version.")
                 except Exception as exc:
                     st.error(f"Could not create Shorts: {exc}")
 
@@ -735,7 +735,7 @@ elif page == "Schedule":
         schedule_submitted = st.form_submit_button("Save Schedule")
     if schedule_submitted:
         if not str(selected_short).strip():
-            st.error("আগে তৈরি Short বেছে নিন অথবা Enter a Short name।")
+            st.error("Select an existing Short or enter a Short name.")
         else:
             schedule_items.append({"short": str(selected_short).strip(), "date": str(schedule_date), "time": str(schedule_time), "channel": selected_channel})
             st.success("Schedule saved for this session.")
