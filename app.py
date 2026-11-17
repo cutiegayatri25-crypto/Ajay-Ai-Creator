@@ -12,6 +12,14 @@ st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #101026 0%, #17143b 55%, #0b2233 100%); color: #f4f7ff; }
 h1, h2, h3 { color: #55e6df; }
+[data-testid="stAppViewContainer"] .main .block-container { max-width: 1180px; padding-top: 2rem; }
+.stApp [data-testid="stVerticalBlock"] > div:has(> [data-testid="stMetric"]) { gap: 0.8rem; }
+.ajay-hero { padding: 28px 30px; border: 1px solid rgba(85,230,223,.28); border-radius: 20px; background: linear-gradient(120deg, rgba(31,42,83,.96), rgba(15,75,83,.72)); margin: 8px 0 22px; }
+.ajay-hero h1 { font-size: 2.35rem; margin: 0 0 8px; color: #f5fbff; }
+.ajay-hero p { color: #d5e8f3; font-size: 1.05rem; margin: 0; }
+.ajay-feature { background: rgba(41,51,91,.42); border: 1px solid #38466d; border-radius: 14px; padding: 16px; min-height: 132px; }
+.ajay-feature h3 { margin-top: 0; font-size: 1.05rem; }
+.ajay-feature p { color: #d5d9e8; font-size: .9rem; }
 [data-testid="stSidebar"] { background: #11132b; }
 [data-testid="stMetric"] { background: rgba(41, 51, 91, 0.55); padding: 12px; border: 1px solid #38466d; border-radius: 12px; }
 [data-testid="stAlert"] { border-radius: 12px; }
@@ -341,14 +349,13 @@ def create_clips(source, output_dir, duration, count, progress, transcript):
     return outputs, subtitles, total
 
 if page == "Dashboard":
-    # Use the actual uploaded app logo in place of the old video emoji icon.
-    title_col_logo, title_col_text = st.columns([0.8, 8], vertical_alignment="center")
-    with title_col_logo:
-        show_logo("logo.webp", 76)
-    with title_col_text:
-        st.title("Ajay AI Creator")
-    st.subheader("Your Personal AI Shorts Studio")
-    st.markdown("### 🔗 YouTube লিংক এখানে পেস্ট করুন")
+    st.markdown("""
+    <section class="ajay-hero">
+      <h1>🎬 Ajay AI Creator</h1>
+      <p>লম্বা YouTube ভিডিও থেকে গুরুত্বপূর্ণ মুহূর্ত বেছে Shorts তৈরি করুন।</p>
+    </section>
+    """, unsafe_allow_html=True)
+    st.markdown("### 🚀 আপনার ভিডিওর লিংক দিন")
     st.text_input(
         "YouTube ভিডিওর লিংক",
         value=st.session_state.get("saved_youtube_url", ""),
@@ -356,16 +363,27 @@ if page == "Dashboard":
         key="youtube_url_dashboard",
         on_change=save_dashboard_youtube_url
     )
-    st.info("লিংক দেওয়ার পর বাম পাশের Upload Video পেজে যান এবং “YouTube লিংক থেকে Shorts তৈরি করুন” চাপুন।")
-    st.success("Welcome to your AI Shorts Studio!")
+    st.info("লিংক দেওয়ার পর বাম পাশের Upload Video পেজে যান। সেখানে Shorts-এর সংখ্যা ও দৈর্ঘ্য বেছে তৈরি শুরু করতে পারবেন।")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Video tools", "Ready")
-    col2.metric("Individual MP4 export", "Ready")
-    col3.metric("YouTube channels", "Not connected")
+    col1.metric("এক ভিডিও থেকে", "সর্বোচ্চ ১০টি", "Shorts")
+    col2.metric("ভিডিও ফরম্যাট", "9:16", "Vertical")
+    col3.metric("খরচ", "ফ্রি স্টার্টার", "কোনো ক্রেডিট কেনা লাগবে না")
     st.divider()
-    st.header("Start Creating")
-    st.write("Upload a video you own or have permission to process.")
-    st.info("Stable vertical framing and MP4 export are included. Automatic speech-to-text captions are temporarily paused in this free starter build. Viral results are not guaranteed.")
+    st.subheader("✨ আপনার Shorts Studio-তে")
+    feature_cols = st.columns(3)
+    feature_cards = [
+        ("🎯 গুরুত্বপূর্ণ মুহূর্ত", "ভিডিওর কথার ট্রান্সক্রিপ্ট থাকলে কথার ঘনত্ব ও প্রশ্ন/হুকের ভিত্তিতে সম্ভাব্য আকর্ষণীয় অংশ বাছাই।"),
+        ("📱 Vertical Shorts", "লম্বা ভিডিওকে 9:16 ফরম্যাটে রূপান্তর করে আলাদা MP4 ক্লিপ তৈরি।"),
+        ("✍️ Title ও Tags", "প্রতিটি ক্লিপের জন্য সম্পাদনাযোগ্য Title, Description ও Tags-এর খসড়া।"),
+        ("💬 সাবটাইটেল", "ট্রান্সক্রিপশন সুবিধা চালু থাকলে SRT ক্যাপশন তৈরি ও ভিডিওতে বসানো।"),
+        ("⬇️ আলাদা ডাউনলোড", "প্রতিটি Shorts আলাদা MP4 ফাইল হিসেবে ডাউনলোড।"),
+        ("📺 ভবিষ্যৎ চ্যানেল সংযোগ", "YouTube OAuth ও API সেটআপ হলে সরাসরি প্রকাশ এবং শিডিউলিং যোগ করা যাবে।")
+    ]
+    for i, (heading, detail) in enumerate(feature_cards):
+        with feature_cols[i % 3]:
+            st.markdown(f'<div class="ajay-feature"><h3>{heading}</h3><p>{detail}</p></div>', unsafe_allow_html=True)
+    st.divider()
+    st.caption("নোট: AI বাছাই করা মুহূর্ত জনপ্রিয় হবে—এমন নিশ্চয়তা নেই। YouTube লিংক প্রসেসিং YouTube-এর অ্যাক্সেস ও সার্ভার সীমাবদ্ধতার ওপর নির্ভরশীল। নিজের বা অনুমতিপ্রাপ্ত ভিডিও ব্যবহার করুন।")
 
 elif page == "Upload Video":
     st.title("📤 Upload Video অথবা YouTube লিংক")
@@ -385,7 +403,7 @@ elif page == "Upload Video":
         key="tunelio_api_key",
         help="নিজের Tunelio API key দিন। এটি এই Streamlit session-এ ব্যবহার হবে; কোডে রাখা হবে না।"
     )
-    yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 3, key="yt_count")
+    yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 10, key="yt_count")
     yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
     st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
     if st.button("▶ YouTube লিংক থেকে Shorts তৈরি করুন", type="primary", disabled=not youtube_url.strip()):
@@ -565,7 +583,7 @@ elif page == "Upload Video":
         st.divider()
         st.subheader("Create vertical Shorts")
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
-        clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=3)
+        clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=10)
         st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
         st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। দ্রুত FFmpeg প্রসেসিং ব্যবহার করা হচ্ছে। অটো ক্যাপশন এই Free Starter সংস্করণে বন্ধ; ক্লিপগুলো সমান ব্যবধানে নেওয়া হবে।")
         if st.button("🎬 Create Shorts", type="primary"):
