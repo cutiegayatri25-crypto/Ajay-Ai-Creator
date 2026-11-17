@@ -159,12 +159,14 @@ def make_vertical_clip(source, output, start, length, resolution="1080p"):
 
 @st.cache_resource(show_spinner="Speech recognition model is loading for the first time...")
 def load_whisper_model():
-    # Optional feature: keep the core app deployable without the large ML runtime.
+    # Speech recognition is optional in the free starter build. Some hosted
+    # Python/dependency combinations fail while importing or opening audio
+    # (including unexpected metadata_errors arguments), so never block clip export.
     try:
         from faster_whisper import WhisperModel
-    except ImportError:
+        return WhisperModel("tiny", device="cpu", compute_type="int8")
+    except Exception:
         return None
-    return WhisperModel("tiny", device="cpu", compute_type="int8")
 
 
 def transcribe_video(source):
