@@ -64,7 +64,7 @@ def ensure_bgutil_pot_provider():
     node = shutil.which("node")
     npm = shutil.which("npm")
     if not node or not npm:
-        raise RuntimeError("Node.js 22+ বা npm পাওয়া যায়নি; PO Token Provider চালু করা যায়নি।")
+        raise RuntimeError("Node.js 22+ or npm was not found; the PO Token Provider could not be started.")
     if not (server_dir / "package.json").exists():
         clone = subprocess.run(
             ["git", "clone", "--depth", "1", "--branch", "2.0.2",
@@ -97,7 +97,7 @@ def ensure_bgutil_pot_provider():
     health_error = None
     for _ in range(20):
         if process.poll() is not None:
-            raise RuntimeError("PO Token Provider process বন্ধ হয়ে গেছে।")
+            raise RuntimeError("The PO Token Provider process has stopped.")
         try:
             with urllib.request.urlopen("http://127.0.0.1:4416/ping", timeout=2) as response:
                 if response.status == 200:
@@ -107,8 +107,8 @@ def ensure_bgutil_pot_provider():
         time.sleep(0.5)
     process.terminate()
     raise RuntimeError(
-        "PO Token Provider-এর /ping health check ব্যর্থ হয়েছে: "
-        + str(health_error or "server response পাওয়া যায়নি")
+        "PO Token Provider /ping health check failed: "
+        + str(health_error or "no server response was received")
     )
 
 
@@ -233,18 +233,18 @@ def download_from_tunelio(youtube_url, api_key, output_path, progress):
         "https://tunelio.dev/create?" + query,
         headers={"Authorization": "Bearer " + api_key, "Accept": "application/json"},
     )
-    progress.progress(5, text="বিকল্প ভিডিও সার্ভিস থেকে ডাউনলোড লিংক নেওয়া হচ্ছে...")
+    progress.progress(5, text="Requesting a download link from the alternative video service...")
     with urllib.request.urlopen(request, timeout=60) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if payload.get("status") != "ok" or not payload.get("url"):
-        raise RuntimeError(payload.get("error") or payload.get("message") or "ভিডিও ডাউনলোড লিংক পাওয়া যায়নি।")
-    progress.progress(10, text="ভিডিও নামানো হচ্ছে...")
+        raise RuntimeError(payload.get("error") or payload.get("message") or "The video download link was not available.")
+    progress.progress(10, text="Downloading video...")
     media_request = urllib.request.Request(payload["url"], headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(media_request, timeout=180) as media_response, open(output_path, "wb") as output:
         shutil.copyfileobj(media_response, output)
     if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
-        raise RuntimeError("ডাউনলোড করা ভিডিও ফাইল খালি।")
-    progress.progress(15, text="ভিডিও ডাউনলোড হয়েছে; এখন Shorts তৈরি হচ্ছে...")
+        raise RuntimeError("The downloaded video file is empty.")
+    progress.progress(15, text="Video downloaded; creating Shorts...")
     return {"title": payload.get("filename", "YouTube video")}, Path(output_path)
 
 def choose_starts(rows, total, clip_len, count):
@@ -296,7 +296,7 @@ def generate_metadata(rows, clip_start, clip_length, index=1):
     ).strip()
     transcript_text = text
     if not text:
-        text = "এই Short-এর জন্য একটি প্রাথমিক খসড়া"
+        text = "A draft for this Short"
     words = re.findall(r"[A-Za-z0-9অ-হা-য়ঁড়ঢ়য়ীুূৃেৈোৌংঃ]+", text.lower())
     stop = {
         "এই","এটা","সেটা","আমি","আমরা","আপনি","তুমি","এবং","কিন্তু","যে","কি","কেন","তো",
@@ -314,14 +314,14 @@ def generate_metadata(rows, clip_start, clip_length, index=1):
     lead = " ".join(text.split()[:9]).strip(" ,.!?।")
     if len(lead) > 64:
         lead = lead[:61].rsplit(" ", 1)[0] + "…"
-    title = f"{lead} | গুরুত্বপূর্ণ মুহূর্ত #{index}" if lead else f"এই ভিডিওর গুরুত্বপূর্ণ মুহূর্ত #{index}"
+    title = f"{lead} | Key Moment #{index}" if lead else f"এই ভিডিওর Key Moment #{index}"
     tags = list(dict.fromkeys(["Shorts", "YouTubeShorts", "AjayAICreator"] + keywords))
     hashtags = " ".join("#" + re.sub(r"[^A-Za-z0-9_অ-হা-য়]", "", t) for t in tags[:8])
     description = (
         f"{text[:450]}{'…' if len(text) > 450 else ''}\n\n"
-        f"আরও এমন ভিডিও দেখতে ফলো করুন।\n{hashtags}\n"
-        ("ভিডিওর কথার ভিত্তিতে তৈরি প্রাথমিক খসড়া।" if transcript_text else
-         "ভিডিওর ট্রান্সক্রিপ্ট পাওয়া যায়নি; প্রকাশের আগে নিজে Title ও Description যাচাই করুন.")
+        f"Follow for more videos like this.\n{hashtags}\n"
+        ("Draft generated from the video's transcript." if transcript_text else
+         "No transcript was available. Review the title and description before publishing.")
     )
     return {"title": title[:100], "description": description, "tags": tags[:15], "transcript": transcript_text}
 
@@ -352,72 +352,72 @@ if page == "Dashboard":
     st.markdown("""
     <section class="ajay-hero">
       <h1>🎬 Ajay AI Creator</h1>
-      <p>লম্বা YouTube ভিডিও থেকে গুরুত্বপূর্ণ মুহূর্ত বেছে Shorts তৈরি করুন।</p>
+      <p>লম্বা YouTube From video Key Moment বেছে Shorts তৈরি করুন।</p>
     </section>
     """, unsafe_allow_html=True)
-    st.markdown("### 🚀 আপনার ভিডিওর লিংক দিন")
+    st.markdown("### 🚀 Paste Your Video Link")
     st.text_input(
-        "YouTube ভিডিওর লিংক",
+        "YouTube Video URL",
         value=st.session_state.get("saved_youtube_url", ""),
         placeholder="https://www.youtube.com/watch?v=...",
         key="youtube_url_dashboard",
         on_change=save_dashboard_youtube_url
     )
-    st.info("লিংক দেওয়ার পর বাম পাশের Upload Video পেজে যান। সেখানে Shorts-এর সংখ্যা ও দৈর্ঘ্য বেছে তৈরি শুরু করতে পারবেন।")
+    st.info("After adding the link, open Upload Video from the sidebar. Choose the number and length of your Shorts to get started.")
     col1, col2, col3 = st.columns(3)
-    col1.metric("এক ভিডিও থেকে", "সর্বোচ্চ ১০টি", "Shorts")
+    col1.metric("From One Video", "Up to 10", "Shorts")
     col2.metric("ভিডিও ফরম্যাট", "9:16", "Vertical")
-    col3.metric("খরচ", "ফ্রি স্টার্টার", "কোনো ক্রেডিট কেনা লাগবে না")
+    col3.metric("Cost", "Free Starter", "No credits required")
     st.divider()
-    st.subheader("✨ আপনার Shorts Studio-তে")
+    st.subheader("✨ Your Shorts Studio")
     feature_cols = st.columns(3)
     feature_cards = [
-        ("🎯 গুরুত্বপূর্ণ মুহূর্ত", "ভিডিওর কথার ট্রান্সক্রিপ্ট থাকলে কথার ঘনত্ব ও প্রশ্ন/হুকের ভিত্তিতে সম্ভাব্য আকর্ষণীয় অংশ বাছাই।"),
-        ("📱 Vertical Shorts", "লম্বা ভিডিওকে 9:16 ফরম্যাটে রূপান্তর করে আলাদা MP4 ক্লিপ তৈরি।"),
-        ("✍️ Title ও Tags", "প্রতিটি ক্লিপের জন্য সম্পাদনাযোগ্য Title, Description ও Tags-এর খসড়া।"),
-        ("💬 সাবটাইটেল", "ট্রান্সক্রিপশন সুবিধা চালু থাকলে SRT ক্যাপশন তৈরি ও ভিডিওতে বসানো।"),
-        ("⬇️ আলাদা ডাউনলোড", "প্রতিটি Shorts আলাদা MP4 ফাইল হিসেবে ডাউনলোড।"),
-        ("📺 ভবিষ্যৎ চ্যানেল সংযোগ", "YouTube OAuth ও API সেটআপ হলে সরাসরি প্রকাশ এবং শিডিউলিং যোগ করা যাবে।")
+        ("🎯 Key Moment", "Find potentially engaging sections using transcript density, questions, and hook phrases when transcription is available."),
+        ("📱 Vertical Shorts", "Convert long videos into vertical 9:16 MP4 clips."),
+        ("✍️ Title ও Tags", "Editable title, description, and tag drafts for every clip."),
+        ("💬 Subtitles", "Generate SRT captions and burn them into the video when transcription is enabled."),
+        ("⬇️ Individual Downloads", "Download each Short as a separate MP4 file."),
+        ("📺 YouTube Channel Integration", "Direct publishing and scheduling can be added after YouTube OAuth and API setup.")
     ]
     for i, (heading, detail) in enumerate(feature_cards):
         with feature_cols[i % 3]:
             st.markdown(f'<div class="ajay-feature"><h3>{heading}</h3><p>{detail}</p></div>', unsafe_allow_html=True)
     st.divider()
-    st.caption("নোট: AI বাছাই করা মুহূর্ত জনপ্রিয় হবে—এমন নিশ্চয়তা নেই। YouTube লিংক প্রসেসিং YouTube-এর অ্যাক্সেস ও সার্ভার সীমাবদ্ধতার ওপর নির্ভরশীল। নিজের বা অনুমতিপ্রাপ্ত ভিডিও ব্যবহার করুন।")
+    st.caption("Note: AI-selected moments are not guaranteed to go viral. YouTube link processing depends on YouTube access and server restrictions. Use videos you own or have permission to process.")
 
 elif page == "Upload Video":
-    st.title("📤 Upload Video অথবা YouTube লিংক")
-    st.caption("শুধু নিজের ভিডিও বা ব্যবহারের অনুমতি থাকা ভিডিও ব্যবহার করুন।")
+    st.title("📤 Upload a Video or Paste a YouTube Link")
+    st.caption("Only use videos you own or have permission to process.")
 
-    st.subheader("🔗 YouTube লিংক থেকে Shorts")
+    st.subheader("🔗 Create Shorts from a YouTube Link")
     youtube_url = st.text_input(
-        "YouTube ভিডিওর লিংক দিন",
+        "YouTube Video URL দিন",
         value=st.session_state.get("saved_youtube_url", ""),
         placeholder="https://www.youtube.com/watch?v=...",
         key="youtube_url_upload",
         on_change=save_upload_youtube_url
     )
     tunelio_api_key = st.text_input(
-        "বিকল্প ডাউনলোড সার্ভিসের API Key (ঐচ্ছিক)",
+        "Alternative Download Service API Key (Optional)",
         type="password",
         key="tunelio_api_key",
-        help="নিজের Tunelio API key দিন। এটি এই Streamlit session-এ ব্যবহার হবে; কোডে রাখা হবে না।"
+        help="Enter your own Tunelio API key. It is used for this Streamlit session and is not stored in the source code."
     )
-    yt_count = st.slider("কতটি Shorts তৈরি করবেন?", 1, 10, 10, key="yt_count")
-    yt_duration = st.selectbox("প্রতিটি Short কত সেকেন্ড?", [15, 30, 45, 60], index=1, key="yt_duration")
-    st.caption("পাবলিক ও ডাউনলোড-অনুমোদিত ভিডিওতে কাজ করতে পারে। প্রাইভেট, সদস্য-শুধু, বয়স-সীমাবদ্ধ বা DRM-সুরক্ষিত ভিডিও নাও চলতে পারে।")
-    if st.button("▶ YouTube লিংক থেকে Shorts তৈরি করুন", type="primary", disabled=not youtube_url.strip()):
+    yt_count = st.slider("How many Shorts would you like to create?", 1, 10, 10, key="yt_count")
+    yt_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1, key="yt_duration")
+    st.caption("Works only with publicly accessible videos you are authorized to process. Private, members-only, age-restricted, or DRM-protected videos may not work.")
+    if st.button("▶ Create Shorts from YouTube Link", type="primary", disabled=not youtube_url.strip()):
         if not find_tool("ffmpeg") or not find_tool("ffprobe"):
-            st.error("সার্ভারে FFmpeg ইনস্টল নেই।")
+            st.error("FFmpeg is not installed on the server.")
         else:
             yt_dir = tempfile.mkdtemp(prefix="ajay_youtube_")
-            progress = st.progress(3, text="YouTube ভিডিওর তথ্য যাচাই হচ্ছে...")
+            progress = st.progress(3, text="Checking YouTube video information...")
             try:
                 import yt_dlp
                 if not (youtube_url.strip().startswith("https://www.youtube.com/") or
                         youtube_url.strip().startswith("https://youtu.be/") or
                         youtube_url.strip().startswith("https://m.youtube.com/")):
-                    raise ValueError("সঠিক YouTube ভিডিও লিংক দিন (youtube.com বা youtu.be)।")
+                    raise ValueError("Enter a valid YouTube video URL (youtube.com or youtu.be).")
 
                 # Try a compatible combined format first, then fall back to best available.
                 # YouTube may still block automated downloads or require account verification.
@@ -440,11 +440,11 @@ elif page == "Upload Video":
                         total_bytes = status.get("total_bytes") or status.get("total_bytes_estimate")
                         if total_bytes:
                             pct = min(14, 3 + int(11 * status.get("downloaded_bytes", 0) / total_bytes))
-                            progress.progress(pct, text=f"YouTube থেকে ভিডিও নামছে... {int(100 * status.get('downloaded_bytes', 0) / total_bytes)}%")
+                            progress.progress(pct, text=f"Downloading video from YouTube... {int(100 * status.get('downloaded_bytes', 0) / total_bytes)}%")
                         else:
-                            progress.progress(5, text="YouTube থেকে ভিডিও নামছে...")
+                            progress.progress(5, text="Downloading video from YouTube...")
                     elif status.get("status") == "finished":
-                        progress.progress(15, text="ভিডিও ডাউনলোড হয়েছে; এখন Shorts তৈরি হচ্ছে...")
+                        progress.progress(15, text="Video downloaded; creating Shorts...")
                 base_opts["progress_hooks"] = [yt_download_progress]
                 info = None
                 downloaded = None
@@ -457,20 +457,20 @@ elif page == "Upload Video":
                         )
                     except Exception as api_error:
                         raise RuntimeError(
-                            "বিকল্প ডাউনলোড সার্ভিস কাজ করেনি। API Key, ফ্রি ক্রেডিট ও ভিডিওর অনুমতি যাচাই করুন। "
+                            "The alternative download service failed. Check the API key, available credits, and video permissions. "
                             + str(api_error)
                         ) from api_error
                 if not downloaded:
                     # Start the optional local BgUtils PO-token provider. If Node.js,
                     # npm, or provider setup is unavailable, still try yt-dlp's other
                     # download clients instead of aborting the entire YouTube workflow.
-                    progress.progress(3, text="YouTube ডাউনলোড সংযোগ প্রস্তুত হচ্ছে...")
+                    progress.progress(3, text="Preparing the YouTube download connection...")
                     pot_provider_process = None
                     try:
                         pot_provider_process = ensure_bgutil_pot_provider()
                     except Exception as provider_error:
                         st.warning(
-                            "PO Token Provider চালু করা যায়নি; বিকল্প YouTube ডাউনলোড পদ্ধতি চেষ্টা করা হবে। "
+                            "The PO Token Provider could not start; another YouTube download method will be attempted. "
                             + str(provider_error)
                         )
                     # mweb uses the installed provider for video-server PO tokens.
@@ -491,7 +491,7 @@ elif page == "Upload Video":
                             downloaded = next((p for p in candidates if p.exists() and p.stat().st_size > 0), None)
                             if downloaded:
                                 break
-                            last_error = "ডাউনলোডের পর ভিডিও ফাইল পাওয়া যায়নি।"
+                            last_error = "The video file was not found after download."
                         except Exception as download_error:
                             last_error = download_error
                             # Remove incomplete files before trying another YouTube client.
@@ -501,28 +501,28 @@ elif page == "Upload Video":
                                 except OSError:
                                     pass
                             if profile_index < len(download_profiles):
-                                progress.progress(8, text="এই পদ্ধতিতে ভিডিও পাওয়া যায়নি; বিকল্প YouTube পদ্ধতি চেষ্টা হচ্ছে...")
+                                progress.progress(8, text="This method did not return a video; trying an alternative YouTube method...")
                 if not downloaded:
-                    error_text = str(last_error or "ডাউনলোড সম্পূর্ণ হয়নি")
+                    error_text = str(last_error or "The download did not complete")
                     if "Sign in to confirm" in error_text or "not a bot" in error_text.lower():
                         raise RuntimeError(
-                            "YouTube এই ক্লাউড সার্ভারের সংযোগকে bot-check দিয়ে আটকে দিয়েছে। "
-                            "PO Token Provider থাকলেও YouTube সব সার্ভার/IP-কে অনুমতি দেয় না। "
-                            "এই ভিডিওটি নিজের বা ব্যবহারের অনুমতিপ্রাপ্ত হলে MP4 ফাইলটি ডাউনলোড করে নিচের Upload Video অংশে দিন। "
-                            "এটি আপনার ভিডিওর ত্রুটি নয়; YouTube-এর সার্ভার-সাইড সীমাবদ্ধতা। "
-                            "মূল Error: " + error_text
+                            "YouTube blocked this cloud server connection with a bot check. "
+                            "Even with a PO Token Provider, YouTube does not allow every server or IP address. "
+                            "If this is your video or you have permission to use it, upload an authorized MP4 file in the section below. "
+                            "This is not an issue with your video; it is a server-side YouTube restriction. "
+                            "Original error: " + error_text
                         )
                     raise RuntimeError(
-                        f"YouTube ডাউনলোড ব্যর্থ হয়েছে: {error_text}. "
-                        "YouTube-এর ফরম্যাট, PO Token বা নেটওয়ার্ক সীমাবদ্ধতার কারণে ভিডিওটি সার্ভার থেকে নামানো যায়নি। "
-                        "নিজের অনুমোদিত ভিডিও হলে MP4 ফাইল আপলোড করুন।"
+                        f"YouTube download failed: {error_text}. "
+                        "The video could not be downloaded because of YouTube format, PO Token, or network restrictions. "
+                        "If you are authorized to use the video, upload an MP4 file instead."
                     )
                 if not downloaded.exists():
                     candidates = list(Path(yt_dir).glob("source.*"))
                     if not candidates:
-                        raise RuntimeError("ভিডিও ফাইল ডাউনলোড সম্পূর্ণ হয়নি।")
+                        raise RuntimeError("ভিডিও ফাইল The download did not complete।")
                     downloaded = candidates[0]
-                progress.progress(15, text="ভিডিও প্রসেস করা হচ্ছে...")
+                progress.progress(15, text="Processing video...")
                 transcript, language = transcribe_video(downloaded)
                 out_dir = Path(yt_dir) / "shorts"
                 out_dir.mkdir()
@@ -535,17 +535,17 @@ elif page == "Upload Video":
                 clip_len = min(float(yt_duration), total)
                 yt_starts = choose_starts(transcript, total, clip_len, len(outputs))
                 st.session_state["ajay_yt_metadata"] = save_clip_metadata(transcript, yt_starts, clip_len)
-                st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}টি Shorts তৈরি হয়েছে। ভাষা: {language}")
-                st.info("ভিডিও প্রসেস সম্পন্ন। এই Free Starter সংস্করণে অটো ট্রান্সক্রিপশন বন্ধ; তাই Shorts সমান ব্যবধানে তৈরি হয়েছে এবং Title/Description/Tags সাধারণ ড্রাফট হিসেবে দেখানো হবে।")
+                st.success(f"{info.get('title', 'ভিডিও')} থেকে {len(outputs)}Shorts created. Language: {language}")
+                st.info("Video processing is complete. Automatic transcription is disabled in this Free Starter version, so clips were selected at even intervals and metadata is shown as a basic draft.")
             except Exception as exc:
-                st.error(f"YouTube লিংক থেকে ভিডিও তৈরি করা যায়নি: {exc}")
-                st.caption("YouTube-এর সার্ভার, PO Token বা নেটওয়ার্ক সীমাবদ্ধতার কারণে এই লিংকটি প্রসেস করা যায়নি। উপরের Error details দেখে ডাউনলোড সংযোগটি পরীক্ষা করুন।")
+                st.error(f"Could not create Shorts from the YouTube link: {exc}")
+                st.caption("This link could not be processed because of YouTube server, PO Token, or network restrictions. Review the error details above.")
 
     yt_files = st.session_state.get("ajay_yt_short_files", [])
     yt_names = st.session_state.get("ajay_yt_short_names", [])
     yt_srts = st.session_state.get("ajay_yt_subtitle_files", [])
     if yt_files:
-        st.subheader("YouTube থেকে তৈরি Shorts")
+        st.subheader("Shorts Created from YouTube")
         for row_start in range(0, len(yt_files), 5):
             cols = st.columns(5, gap="small")
             for col, i in zip(cols, range(row_start, min(row_start + 5, len(yt_files)))):
@@ -569,8 +569,8 @@ elif page == "Upload Video":
                             st.download_button("💬 SRT", sf.read(), file_name=Path(yt_srts[i]).name, mime="application/x-subrip", key=f"yt_srt_{i}")
 
     st.divider()
-    st.subheader("অথবা ভিডিও ফাইল আপলোড করুন")
-    st.caption("বড় ভিডিও আপলোডে ইন্টারনেটের গতি, Streamlit Cloud-এর আপলোড সীমা ও সার্ভারের মেমোরির কারণে সময় লাগতে পারে। প্রথমে 30–100 MB-এর ছোট MP4 দিয়ে পরীক্ষা করুন।")
+    st.subheader("Or Upload a Video File")
+    st.caption("Large uploads may take time due to internet speed, Streamlit Cloud upload limits, and server memory. For testing, start with a small 30–100 MB MP4.")
     st.title("📤 Upload Your Video")
     st.caption("Use videos you own or have permission to process.")
     video = st.file_uploader(
@@ -584,8 +584,8 @@ elif page == "Upload Video":
         st.subheader("Create vertical Shorts")
         clip_duration = st.selectbox("Length of each Short", [15, 30, 45, 60], index=1)
         clip_count = st.slider("Number of Shorts", min_value=1, max_value=10, value=10)
-        st.caption("ভিডিওর পুরো আসল ফ্রেম স্থিরভাবে দেখানো হবে। কোনো মুখ-ট্র্যাকিং বা নড়াচড়া করা ক্রপ নেই; আসল ভিডিওর অনুপাতও বদলাবে না।")
-        st.info("ভিডিও থেকে 9:16 Shorts তৈরি হবে। দ্রুত FFmpeg প্রসেসিং ব্যবহার করা হচ্ছে। অটো ক্যাপশন এই Free Starter সংস্করণে বন্ধ; ক্লিপগুলো সমান ব্যবধানে নেওয়া হবে।")
+        st.caption("The original video frame will be fitted without face tracking or dynamic reframing. The source aspect ratio will be preserved.")
+        st.info("From video 9:16 Shorts তৈরি হবে। দ্রুত FFmpeg প্রসেসিং ব্যবহার করা হচ্ছে। অটো ক্যাপশন এই Free Starter সংস্করণে বন্ধ; ক্লিপগুলো সমান ব্যবধানে নেওয়া হবে।")
         if st.button("🎬 Create Shorts", type="primary"):
             if not find_tool("ffmpeg") or not find_tool("ffprobe"):
                 st.error("Video tools are not installed on the server yet.")
@@ -610,7 +610,7 @@ elif page == "Upload Video":
                     upload_starts = choose_starts(transcript, total, clip_len, len(outputs))
                     st.session_state["ajay_metadata"] = save_clip_metadata(transcript, upload_starts, clip_len)
                     st.success(f"Created {len(outputs)} suggested Shorts. Detected language: {language}.")
-                    st.info("ভিডিও প্রসেস সম্পন্ন। এই ফ্রি স্টার্টার সংস্করণে অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে।")
+                    st.info("ভিডিও প্রসেস সম্পন্ন। এই Free Starter সংস্করণে অটো ক্যাপশন সাময়িকভাবে বন্ধ আছে।")
                 except Exception as exc:
                     st.error(f"Could not create Shorts: {exc}")
 
@@ -620,7 +620,7 @@ elif page == "Upload Video":
         if saved_files:
             st.divider()
             st.subheader("Your Shorts")
-            st.caption("ছোট প্রিভিউ দেখুন এবং প্রতিটি ভিডিও আলাদাভাবে MP4 হিসেবে ডাউনলোড করুন।")
+            st.caption("Preview your clips and download each video separately as an MP4.")
             existing = [
                 (idx, file_path, file_name)
                 for idx, (file_path, file_name) in enumerate(zip(saved_files, saved_names), 1)
@@ -665,10 +665,10 @@ elif page == "Upload Video":
 
 elif page == "Shorts & Captions":
     st.title("✍️ Shorts & Captions")
-    st.write("এখানে তৈরি Shorts-এর Title, Description ও Tags দেখা ও সম্পাদনা করতে পারবেন।")
+    st.write("View and edit titles, descriptions, and tags for your generated Shorts here.")
     file_meta = st.session_state.get("ajay_metadata", [])
     youtube_meta = st.session_state.get("ajay_yt_metadata", [])
-    generated = [("আপলোড করা ভিডিও", file_meta), ("YouTube লিংক", youtube_meta)]
+    generated = [("Uploaded Video", file_meta), ("YouTube Link", youtube_meta)]
     shown = 0
     for source_label, items in generated:
         if items:
@@ -678,75 +678,75 @@ elif page == "Shorts & Captions":
                 with st.expander(f"{source_label} — Short {n}", expanded=(shown == 1)):
                     st.text_input("Title", value=item.get("title", ""), key=f"meta_{source_label}_{n}_title")
                     st.text_area("Description", value=item.get("description", ""), key=f"meta_{source_label}_{n}_description", height=110)
-                    st.text_area("Tags (কমা দিয়ে আলাদা করুন)", value=", ".join(item.get("tags", [])), key=f"meta_{source_label}_{n}_tags", height=80)
+                    st.text_area("Tags (separate with commas)", value=", ".join(item.get("tags", [])), key=f"meta_{source_label}_{n}_tags", height=80)
                     if not item.get("transcript"):
-                        st.info("এই Short-এর অডিও থেকে কথার ট্রান্সক্রিপ্ট তৈরি হয়নি। তাই Title/Description/Tags সাধারণ প্রাথমিক খসড়া; AI-তৈরি বা ভাইরাল বলে ধরে নেবেন না।")
+                        st.info("No speech transcript was generated for this Short. The title, description, and tags are basic drafts—not AI-verified or guaranteed to go viral.")
     if not shown:
-        st.warning("এখনো কোনো Short তৈরি হয়নি। বাম পাশের Upload Video পেজে গিয়ে ছোট MP4 আপলোড করে Create Shorts চাপুন।")
+        st.warning("No Shorts have been created yet. Open Upload Video in the sidebar, upload a small MP4, and click Create Shorts.")
     st.divider()
-    st.caption("অটো স্পিচ-টু-টেক্সট ক্যাপশন এই Free Starter সংস্করণে চালু নেই। SRT ফাইল তৈরি হলেও ট্রান্সক্রিপ্ট না থাকলে সেটি ফাঁকা থাকবে।")
+    st.caption("Automatic speech-to-text captions are not enabled in this Free Starter version. An SRT file may be empty if no transcript is available.")
 
 elif page == "YouTube Channels":
     st.title("📺 YouTube Channels")
-    st.caption("এখানে চ্যানেলের লিংক সংরক্ষণ করা যাবে। এটি Google OAuth সংযোগ নয়।")
+    st.caption("You can save channel links here. This does not connect your account through Google OAuth.")
     channels = st.session_state.setdefault("ajay_channel_links", [])
     with st.form("add_channel_form", clear_on_submit=True):
-        channel_name = st.text_input("চ্যানেলের নাম (ঐচ্ছিক)")
+        channel_name = st.text_input("Channel Name (Optional)")
         channel_url = st.text_input("YouTube Channel URL", placeholder="https://www.youtube.com/@yourchannel")
-        submitted = st.form_submit_button("চ্যানেলের লিংক যোগ করুন")
+        submitted = st.form_submit_button("Add Channel Link")
     if submitted:
         url = channel_url.strip()
         if not (url.startswith("https://www.youtube.com/") or url.startswith("https://youtube.com/")):
-            st.error("সঠিক YouTube channel URL দিন (https://www.youtube.com/...)।")
+            st.error("Enter a valid YouTube channel URL (https://www.youtube.com/...).")
         elif any(c.get("url") == url for c in channels):
-            st.warning("এই চ্যানেলের লিংকটি আগে থেকেই যোগ করা আছে।")
+            st.warning("This channel link has already been added.")
         elif len(channels) >= 5:
-            st.warning("সর্বোচ্চ ৫টি চ্যানেল লিংক রাখা যাবে।")
+            st.warning("You can save up to 5 channel links.")
         else:
             channels.append({"name": channel_name.strip() or "YouTube Channel", "url": url})
-            st.success("চ্যানেলের লিংক এই সেশনে যোগ হয়েছে।")
+            st.success("Channel link added to this session.")
     if channels:
-        st.subheader("সংরক্ষিত চ্যানেল লিংক")
+        st.subheader("Saved Channel Links")
         for i, channel in enumerate(channels):
             left, right = st.columns([5, 1])
             left.markdown(f"**{channel['name']}**  \n{channel['url']}")
-            if right.button("বাদ দিন", key=f"remove_channel_{i}"):
+            if right.button("Remove", key=f"remove_channel_{i}"):
                 channels.pop(i)
                 st.rerun()
-    st.warning("Google OAuth credentials এবং অনুমোদিত YouTube API সংযোগ এখনো সেট করা নেই। তাই এই লিংকগুলো দিয়ে ভিডিও আপলোড বা প্রকাশ করা যাবে না।")
+    st.warning("Google OAuth credentials and an authorized YouTube API connection are not configured yet. These links cannot be used to upload or publish videos.")
 
 elif page == "Schedule":
     st.title("🗓️ Schedule")
-    st.write("এটি আপাতত আপনার প্রকাশের পরিকল্পনার তালিকা—এখান থেকে YouTube-এ ভিডিও আপলোড বা Auto Publish হয় না।")
+    st.write("This is currently a publishing plan only. It does not upload or auto-publish videos to YouTube.")
     schedule_items = st.session_state.setdefault("ajay_schedule_items", [])
     available_shorts = st.session_state.get("ajay_short_names", []) + st.session_state.get("ajay_yt_short_names", [])
     with st.form("schedule_form", clear_on_submit=True):
         if available_shorts:
-            selected_short = st.selectbox("কোন Short-এর জন্য পরিকল্পনা করবেন?", available_shorts)
+            selected_short = st.selectbox("Which Short would you like to schedule?", available_shorts)
         else:
-            selected_short = st.text_input("Short-এর নাম লিখুন", placeholder="যেমন: Ajay_Short_01.mp4")
-            st.caption("Short তৈরি না করেও পরিকল্পনার নাম লিখতে পারবেন।")
-        schedule_date = st.date_input("প্রকাশের তারিখ")
-        schedule_time = st.time_input("প্রকাশের সময়")
-        channel_options = ["চ্যানেল নির্বাচন করা হয়নি"] + [
+            selected_short = st.text_input("Enter a Short name", placeholder="Example: Ajay_Short_01.mp4")
+            st.caption("You can enter a plan even before creating a Short.")
+        schedule_date = st.date_input("Publish Date")
+        schedule_time = st.time_input("Publish Time")
+        channel_options = ["No channel selected"] + [
             c.get("name", c.get("url", "Channel")) for c in st.session_state.get("ajay_channel_links", [])
         ]
-        selected_channel = st.selectbox("কোন চ্যানেলের জন্য?", channel_options)
-        schedule_submitted = st.form_submit_button("পরিকল্পনা সংরক্ষণ করুন")
+        selected_channel = st.selectbox("Which channel?", channel_options)
+        schedule_submitted = st.form_submit_button("Save Schedule")
     if schedule_submitted:
         if not str(selected_short).strip():
-            st.error("আগে তৈরি Short বেছে নিন অথবা Short-এর নাম লিখুন।")
+            st.error("আগে তৈরি Short বেছে নিন অথবা Enter a Short name।")
         else:
             schedule_items.append({"short": str(selected_short).strip(), "date": str(schedule_date), "time": str(schedule_time), "channel": selected_channel})
-            st.success("পরিকল্পনাটি এই সেশনে সংরক্ষিত হয়েছে।")
+            st.success("Schedule saved for this session.")
     if schedule_items:
-        st.subheader("সংরক্ষিত পরিকল্পনা")
+        st.subheader("Saved Schedules")
         for i, item in enumerate(schedule_items):
             st.write(f"{i+1}. {item['short']} — {item['date']} {item['time']} — {item['channel']}")
-            if st.button("এই পরিকল্পনা মুছুন", key=f"delete_schedule_{i}"):
+            if st.button("Delete this schedule", key=f"delete_schedule_{i}"):
                 schedule_items.pop(i)
                 st.rerun()
-    st.warning("গুরুত্বপূর্ণ: পরিকল্পনাগুলো শুধু Streamlit-এর বর্তমান session-এ থাকে; অ্যাপ restart হলে মুছে যেতে পারে। স্থায়ী সংরক্ষণ ও YouTube-এ নির্দিষ্ট সময়ে প্রকাশের জন্য database, Google OAuth এবং YouTube Data API কনফিগার করতে হবে।")
+    st.warning("Important: Schedules are stored only in the current Streamlit session and may disappear when the app restarts. Persistent storage and scheduled YouTube publishing require a database, Google OAuth, and the YouTube Data API.")
 
 st.divider()
 st.caption("Ajay AI Creator | Free Starter Version")
